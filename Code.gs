@@ -1139,9 +1139,17 @@ function findDestinationHeaders_(sheet) {
     return null;
   }
 
+  // PPMP Form data-entry rows begin at row 4. Keep validation and
+  // edit handling aligned to that fixed first entry row, regardless
+  // of whether the sheet uses one-row or multi-row headers.
+  const dataStartRow =
+    sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
+      ? 4
+      : Math.max(headerRow, lastHeaderRow) + 1;
+
   return {
     headerRow: headerRow,
-    dataStartRow: Math.max(headerRow, lastHeaderRow) + 1,
+    dataStartRow: dataStartRow,
     headerMap: headerMap
   };
 }
