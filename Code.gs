@@ -318,8 +318,11 @@ function findSourceHeaders_(values) {
     uom: [
       'UOM',
       'Unit of Measurement',
+      'Unit of Measure',
       'Unit or Measurement/Size',
+      'Unit or Measurement Size',
       'Unit/Measurement/Size',
+      'Unit/Measure/Size',
       'Unit',
       'Measurement/Size'
     ],
@@ -1089,12 +1092,30 @@ function findDestinationHeaders_(sheet) {
         'uom',
         'unit',
         'unit of measurement',
+        'unit of measure',
         'unit/measurement/size',
         'measurement/size',
-        'unit or measurement/size'
+        'unit or measurement/size',
+        'unit or measurement size',
+        'unit/measure/size',
+        'measurement',
+        'size'
       ].map(normalizeHeader_);
 
-      if (uomAliases.indexOf(normalized) !== -1) {
+      // Some spreadsheet headers include extra wording or line breaks.
+      // Normalize first, then accept common UOM labels and close variants.
+      const looksLikeUomHeader =
+        uomAliases.indexOf(normalized) !== -1 ||
+        (
+          normalized.indexOf('unit') !== -1 &&
+          (
+            normalized.indexOf('measurement') !== -1 ||
+            normalized.indexOf('measure') !== -1 ||
+            normalized.indexOf('size') !== -1
+          )
+        );
+
+      if (looksLikeUomHeader) {
         headerMap[
           normalizeHeader_(
             ENTRY_CONFIG.DESTINATION_HEADERS.uom
