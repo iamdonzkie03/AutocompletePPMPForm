@@ -248,7 +248,7 @@ function loadSourceLookup_(sourceSheet) {
   const options = [];
   const seen = new Set();
 
-  for (let r = info.dataStartRow; r < values.length; r++) {
+  for (let r = info.headerRow + 1; r < values.length; r++) {
     const row = values[r];
 
     const description =
