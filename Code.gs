@@ -1078,9 +1078,29 @@ function findDestinationHeaders_(sheet) {
           );
 
         if (normalized === expected) {
-          headerMap[normalized] = c;
+          headerMap[expected] = c;
         }
       });
+
+      // Accept common UOM header variants in the PPMP Form.
+      // All variants map to the canonical destination header
+      // "Unit or Measurement/Size" used by the autofill routine.
+      const uomAliases = [
+        'uom',
+        'unit',
+        'unit of measurement',
+        'unit/measurement/size',
+        'measurement/size',
+        'unit or measurement/size'
+      ].map(normalizeHeader_);
+
+      if (uomAliases.indexOf(normalized) !== -1) {
+        headerMap[
+          normalizeHeader_(
+            ENTRY_CONFIG.DESTINATION_HEADERS.uom
+          )
+        ] = c;
+      }
     }
 
     if (
