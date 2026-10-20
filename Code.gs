@@ -1144,7 +1144,7 @@ function findDestinationHeaders_(sheet) {
   // of whether the sheet uses one-row or multi-row headers.
   const dataStartRow =
     sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
-      ? 4
+      ? 5
       : Math.max(headerRow, lastHeaderRow) + 1;
 
   return {
