@@ -102,94 +102,27 @@ function setupEntryDropdownAndAutofill() {
     );
   }
 
-  // Create or refresh the hidden dropdown helper sheet.
-  let helperSheet =
-    spreadsheet.getSheetByName(
-      ENTRY_CONFIG.HELPER_SHEET_NAME
-    );
-
-  if (!helperSheet) {
-    helperSheet =
-      spreadsheet.insertSheet(
-        ENTRY_CONFIG.HELPER_SHEET_NAME
-      );
-  }
-
-  helperSheet.clearContents();
-
-  helperSheet.getRange(
-    1, 1, sourceData.options.length, 1
-  ).setValues(
-    sourceData.options.map(function(value) {
-      return [value];
-    })
+  // Remember which destination spreadsheet this script serves so
+  // edits made in the separate Entries spreadsheet can refresh it.
+  PropertiesService.getScriptProperties().setProperty(
+    'PPMP_DESTINATION_SPREADSHEET_ID',
+    spreadsheet.getId()
   );
 
-  if (!helperSheet.isSheetHidden()) {
-    helperSheet.hideSheet();
-  }
-
-  // Apply project-description dropdowns.
-  let descriptionDropdownsApplied = 0;
-
-  spreadsheet.getSheets().forEach(function(sheet) {
-    if (
-      sheet.getName() ===
-      ENTRY_CONFIG.HELPER_SHEET_NAME
-    ) {
-      return;
-    }
-
-    const info = findDestinationHeaders_(sheet);
-    if (!info) return;
-
-    const descriptionColumn =
-      info.headerMap[
-        normalizeHeader_(
-          ENTRY_CONFIG.DESTINATION_HEADERS.description
-        )
-      ];
-
-    if (descriptionColumn === undefined) return;
-
-    const availableRows =
-      sheet.getMaxRows() - info.dataStartRow + 1;
-
-    if (availableRows <= 0) return;
-
-    const rule =
-      SpreadsheetApp.newDataValidation()
-        .requireValueInRange(
-          helperSheet.getRange(
-            1, 1, sourceData.options.length, 1
-          ),
-          true
-        )
-        .setAllowInvalid(false)
-        .setHelpText(
-          'Select a project description from the Entries source.'
-        )
-        .build();
-
-    sheet.getRange(
-      info.dataStartRow,
-      descriptionColumn + 1,
-      availableRows,
-      1
-    ).setDataValidation(rule);
-
-    descriptionDropdownsApplied++;
-  });
+  const descriptionDropdownsApplied =
+    refreshEntryDropdownOptions_(spreadsheet, sourceData);
 
   // Apply procurement-mode dropdowns.
   const modeDropdownsApplied =
     applyRecommendedModeDropdown_(spreadsheet);
 
-  // Recreate the installable onEdit trigger.
+  // Recreate both installable edit triggers:
+  // 1) edits inside PPMP Form; 2) edits inside the external Entries sheet.
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    const handler = trigger.getHandlerFunction();
     if (
-      trigger.getHandlerFunction() ===
-      'handleEntrySelection'
+      handler === 'handleEntrySelection' ||
+      handler === 'handleEntriesSourceEdit'
     ) {
       ScriptApp.deleteTrigger(trigger);
     }
@@ -197,6 +130,11 @@ function setupEntryDropdownAndAutofill() {
 
   ScriptApp.newTrigger('handleEntrySelection')
     .forSpreadsheet(spreadsheet)
+    .onEdit()
+    .create();
+
+  ScriptApp.newTrigger('handleEntriesSourceEdit')
+    .forSpreadsheet(sourceSpreadsheet)
     .onEdit()
     .create();
 
@@ -213,6 +151,180 @@ function setupEntryDropdownAndAutofill() {
     '. PPMP Summary updated.',
     'Procurement Automation',
     8
+  );
+}
+
+
+/***************************************************************
+ * REFRESH DROPDOWN OPTIONS
+ *
+ * Rebuilds the hidden helper list and reapplies validations after
+ * Entries source data changes.
+ ***************************************************************/
+
+function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
+  let helperSheet = spreadsheet.getSheetByName(
+    ENTRY_CONFIG.HELPER_SHEET_NAME
+  );
+
+  if (!helperSheet) {
+    helperSheet = spreadsheet.insertSheet(
+      ENTRY_CONFIG.HELPER_SHEET_NAME
+    );
+  }
+
+  helperSheet.clearContents();
+
+  if (sourceData.options.length) {
+    helperSheet.getRange(
+      1, 1, sourceData.options.length, 1
+    ).setValues(sourceData.options.map(function(value) {
+      return [value];
+    }));
+  }
+
+  if (!helperSheet.isSheetHidden()) helperSheet.hideSheet();
+
+  let updated = 0;
+
+  spreadsheet.getSheets().forEach(function(sheet) {
+    if (sheet.getName() === ENTRY_CONFIG.HELPER_SHEET_NAME) return;
+
+    const info = findDestinationHeaders_(sheet);
+    if (!info) return;
+
+    const descriptionColumn = info.headerMap[
+      normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.description)
+    ];
+    if (descriptionColumn === undefined || sourceData.options.length === 0) return;
+
+    const availableRows = sheet.getMaxRows() - info.dataStartRow + 1;
+    if (availableRows <= 0) return;
+
+    const rule = SpreadsheetApp.newDataValidation()
+      .requireValueInRange(helperSheet.getRange(1, 1, sourceData.options.length, 1), true)
+      .setAllowInvalid(false)
+      .setHelpText('Select a project description from the Entries source.')
+      .build();
+
+    sheet.getRange(
+      info.dataStartRow, descriptionColumn + 1, availableRows, 1
+    ).setDataValidation(rule);
+
+    updated++;
+  });
+
+  return updated;
+}
+
+
+/***************************************************************
+ * SOURCE ENTRIES EDIT TRIGGER
+ *
+ * Runs when the separate source spreadsheet's Entries sheet is
+ * edited. Refreshes dropdowns, updates existing PPMP Form rows,
+ * then rebuilds the category totals in PPMP Summary.
+ ***************************************************************/
+
+function handleEntriesSourceEdit(e) {
+  if (!e || !e.range) return;
+
+  const sourceSheet = e.range.getSheet();
+  if (sourceSheet.getName() !== ENTRY_CONFIG.SOURCE_SHEET_NAME) return;
+
+  const destinationId = PropertiesService.getScriptProperties()
+    .getProperty('PPMP_DESTINATION_SPREADSHEET_ID');
+
+  if (!destinationId) {
+    throw new Error(
+      'Destination spreadsheet is not configured. Run setupEntryDropdownAndAutofill() once.'
+    );
+  }
+
+  const destinationSpreadsheet = SpreadsheetApp.openById(destinationId);
+  const formSheet = destinationSpreadsheet.getSheetByName(
+    ENTRY_CONFIG.PPMP_FORM_SHEET
+  );
+
+  if (!formSheet) throw new Error('The PPMP Form sheet was not found.');
+
+  const currentSourceData = loadSourceLookup_(sourceSheet);
+  refreshEntryDropdownOptions_(destinationSpreadsheet, currentSourceData);
+
+  const formInfo = findDestinationHeaders_(formSheet);
+  if (!formInfo) throw new Error('Could not locate headers in PPMP Form.');
+
+  const descriptionColumn = formInfo.headerMap[
+    normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.description)
+  ];
+
+  const lastRow = formSheet.getLastRow();
+
+  if (descriptionColumn !== undefined && lastRow >= formInfo.dataStartRow) {
+    const range = formSheet.getRange(
+      formInfo.dataStartRow,
+      descriptionColumn + 1,
+      lastRow - formInfo.dataStartRow + 1,
+      1
+    );
+
+    const descriptions = range.getDisplayValues();
+    const lookup = currentSourceData.lookup;
+    const optionByBaseDescription = {};
+
+    // Build a fallback index by the source item name before the
+    // comma-space that separates it from technical specifications.
+    currentSourceData.options.forEach(function(option) {
+      const baseName = option.split(', ')[0];
+      const key = normalizeValue_(baseName);
+      if (!optionByBaseDescription[key]) optionByBaseDescription[key] = [];
+      optionByBaseDescription[key].push(option);
+    });
+
+    descriptions.forEach(function(row, index) {
+      const currentValue = String(row[0] || '').trim();
+      if (!currentValue) return;
+
+      let selectedOption = currentValue;
+      let record = lookup[normalizeValue_(currentValue)];
+
+      if (!record) {
+        const baseName = currentValue.split(', ')[0];
+        const matches = optionByBaseDescription[normalizeValue_(baseName)] || [];
+
+        // Only auto-remap a stale selection when the item name matches
+        // exactly one current source option.
+        if (matches.length === 1) {
+          selectedOption = matches[0];
+          record = lookup[normalizeValue_(selectedOption)];
+          range.getCell(index + 1, 1).setValue(selectedOption);
+        }
+      }
+
+      if (record) {
+        const targetRow = formInfo.dataStartRow + index;
+
+        setIfPresent_(formSheet, targetRow, formInfo.headerMap,
+          ENTRY_CONFIG.DESTINATION_HEADERS.classification, record.classification);
+        setIfPresent_(formSheet, targetRow, formInfo.headerMap,
+          ENTRY_CONFIG.DESTINATION_HEADERS.category, record.category);
+        setIfPresent_(formSheet, targetRow, formInfo.headerMap,
+          ENTRY_CONFIG.DESTINATION_HEADERS.uom, record.uom);
+        setIfPresent_(formSheet, targetRow, formInfo.headerMap,
+          ENTRY_CONFIG.DESTINATION_HEADERS.unitCost, record.unitCost);
+
+        updateEstimatedBudget_(formSheet, targetRow, formInfo.headerMap);
+      }
+    });
+  }
+
+  SpreadsheetApp.flush();
+  updatePPMPSummary_(destinationSpreadsheet);
+
+  destinationSpreadsheet.toast(
+    'Entries changed: PPMP Form and PPMP Summary have been refreshed.',
+    'Procurement Automation',
+    6
   );
 }
 
