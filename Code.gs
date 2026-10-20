@@ -999,45 +999,68 @@ function findCategoryAmountHeaders_(sheet) {
     1, 1, lastRow, lastColumn
   ).getDisplayValues();
 
-  const categoryHeader =
-    normalizeHeader_('Category');
+  const categoryHeader = normalizeHeader_('Category');
 
-  const amountHeaders = [
-    'Total Amount',
-    ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget,
-    'Estimated Budget',
-    'Amount'
-  ].map(normalizeHeader_);
+  // Prefer the actual line-item amount column on PPMP Form.
+  // Summary sheets can use Total Amount or similar headings.
+  const preferredAmountHeaders = [
+    normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget),
+    normalizeHeader_('Estimated Budget'),
+    normalizeHeader_('Total Amount'),
+    normalizeHeader_('Total ABC'),
+    normalizeHeader_('Amount')
+  ];
 
+  let categoryColumn = null;
+  let categoryHeaderRow = null;
+  const amountColumnsByHeader = {};
+
+  // Scan the whole header area instead of requiring Category and
+  // the amount header to be on the same row. PPMP Form often uses
+  // multi-row and merged headers.
   for (let r = 0; r < values.length; r++) {
-    let categoryColumn = null;
-    let amountColumn = null;
-
     for (let c = 0; c < values[r].length; c++) {
-      const header =
-        normalizeHeader_(values[r][c]);
+      const header = normalizeHeader_(values[r][c]);
+      if (!header) continue;
 
-      if (header === categoryHeader) {
+      if (header === categoryHeader && categoryColumn === null) {
         categoryColumn = c + 1;
+        categoryHeaderRow = r + 1;
       }
 
-      if (amountHeaders.indexOf(header) !== -1) {
-        amountColumn = c + 1;
+      if (
+        preferredAmountHeaders.indexOf(header) !== -1 &&
+        amountColumnsByHeader[header] === undefined
+      ) {
+        amountColumnsByHeader[header] = {
+          column: c + 1,
+          row: r + 1
+        };
       }
-    }
-
-    if (categoryColumn && amountColumn) {
-      return {
-        headerRow: r + 1,
-        categoryColumn: categoryColumn,
-        amountColumn: amountColumn
-      };
     }
   }
 
-  return null;
-}
+  if (!categoryColumn) return null;
 
+  let amountInfo = null;
+  for (let i = 0; i < preferredAmountHeaders.length; i++) {
+    const candidate = amountColumnsByHeader[preferredAmountHeaders[i]];
+    if (candidate) {
+      amountInfo = candidate;
+      break;
+    }
+  }
+
+  if (!amountInfo) return null;
+
+  return {
+    // Keep the category header row as the output anchor for PPMP Summary.
+    headerRow: categoryHeaderRow,
+    categoryColumn: categoryColumn,
+    amountColumn: amountInfo.column,
+    amountHeaderRow: amountInfo.row
+  };
+}
 
 /***************************************************************
  * FIND DESTINATION HEADERS
