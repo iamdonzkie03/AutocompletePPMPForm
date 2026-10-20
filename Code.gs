@@ -862,7 +862,10 @@ function updatePPMPSummary_(spreadsheet) {
   }
 
   const totals = new Map();
-  const firstDataRow = formInfo.headerRow + 1;
+  // PPMP Form entries begin at row 5; do not summarize header rows.
+  const firstDataRow = ENTRY_CONFIG.PPMP_FORM_SHEET === formSheet.getName()
+    ? 5
+    : formInfo.headerRow + 1;
   const lastDataRow = formSheet.getLastRow();
   const lastColumn = formSheet.getLastColumn();
 
@@ -1139,7 +1142,7 @@ function findDestinationHeaders_(sheet) {
     return null;
   }
 
-  // PPMP Form data-entry rows begin at row 4. Keep validation and
+  // PPMP Form data-entry rows begin at row 5. Keep validation and
   // edit handling aligned to that fixed first entry row, regardless
   // of whether the sheet uses one-row or multi-row headers.
   const dataStartRow =
