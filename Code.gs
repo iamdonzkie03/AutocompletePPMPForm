@@ -1057,52 +1057,63 @@ function findDestinationHeaders_(sheet) {
     1, 1, rowsToSearch, lastColumn
   ).getDisplayValues();
 
-  const descriptionHeader =
-    normalizeHeader_(
-      ENTRY_CONFIG.DESTINATION_HEADERS.description
-    );
+  const descriptionHeader = normalizeHeader_(
+    ENTRY_CONFIG.DESTINATION_HEADERS.description
+  );
+
+  const uomHeader = normalizeHeader_(
+    ENTRY_CONFIG.DESTINATION_HEADERS.uom
+  );
+
+  const uomAliases = [
+    'uom',
+    'unit',
+    'unit of measurement',
+    'unit of measure',
+    'unit/measurement/size',
+    'measurement/size',
+    'unit or measurement/size',
+    'unit or measurement size',
+    'unit/measure/size',
+    'measurement',
+    'size'
+  ].map(normalizeHeader_);
+
+  // PPMP Form can use a two-row header: the main description and
+  // other headings may be on one row, while "Unit or Measurement/Size"
+  // appears on the next row beneath the merged "Quantity and Size..."
+  // parent heading. Collect headers across the searched rows, preserving
+  // the first match for each field so the subheader is not missed.
+  const headerMap = {};
+  let headerRow = null;
 
   for (let r = 0; r < values.length; r++) {
-    const headerMap = {};
-
     for (let c = 0; c < values[r].length; c++) {
-      const normalized =
-        normalizeHeader_(values[r][c]);
-
+      const normalized = normalizeHeader_(values[r][c]);
       if (!normalized) continue;
+
+      if (
+        normalized === descriptionHeader &&
+        headerRow === null
+      ) {
+        headerRow = r + 1;
+      }
 
       Object.keys(
         ENTRY_CONFIG.DESTINATION_HEADERS
       ).forEach(function(key) {
-        const expected =
-          normalizeHeader_(
-            ENTRY_CONFIG.DESTINATION_HEADERS[key]
-          );
+        const expected = normalizeHeader_(
+          ENTRY_CONFIG.DESTINATION_HEADERS[key]
+        );
 
-        if (normalized === expected) {
+        if (
+          normalized === expected &&
+          headerMap[expected] === undefined
+        ) {
           headerMap[expected] = c;
         }
       });
 
-      // Accept common UOM header variants in the PPMP Form.
-      // All variants map to the canonical destination header
-      // "Unit or Measurement/Size" used by the autofill routine.
-      const uomAliases = [
-        'uom',
-        'unit',
-        'unit of measurement',
-        'unit of measure',
-        'unit/measurement/size',
-        'measurement/size',
-        'unit or measurement/size',
-        'unit or measurement size',
-        'unit/measure/size',
-        'measurement',
-        'size'
-      ].map(normalizeHeader_);
-
-      // Some spreadsheet headers include extra wording or line breaks.
-      // Normalize first, then accept common UOM labels and close variants.
       const looksLikeUomHeader =
         uomAliases.indexOf(normalized) !== -1 ||
         (
@@ -1114,28 +1125,24 @@ function findDestinationHeaders_(sheet) {
           )
         );
 
-      if (looksLikeUomHeader) {
-        headerMap[
-          normalizeHeader_(
-            ENTRY_CONFIG.DESTINATION_HEADERS.uom
-          )
-        ] = c;
+      if (
+        looksLikeUomHeader &&
+        headerMap[uomHeader] === undefined
+      ) {
+        headerMap[uomHeader] = c;
       }
-    }
-
-    if (
-      headerMap[descriptionHeader] !== undefined
-    ) {
-      return {
-        headerRow: r + 1,
-        headerMap: headerMap
-      };
     }
   }
 
-  return null;
-}
+  if (headerRow === null) {
+    return null;
+  }
 
+  return {
+    headerRow: headerRow,
+    headerMap: headerMap
+  };
+}
 
 /***************************************************************
  * SET DESTINATION CELL IF HEADER EXISTS
