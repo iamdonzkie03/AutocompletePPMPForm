@@ -153,7 +153,7 @@ function setupEntryDropdownAndAutofill() {
     if (descriptionColumn === undefined) return;
 
     const availableRows =
-      sheet.getMaxRows() - info.headerRow;
+      sheet.getMaxRows() - info.dataStartRow + 1;
 
     if (availableRows <= 0) return;
 
@@ -172,7 +172,7 @@ function setupEntryDropdownAndAutofill() {
         .build();
 
     sheet.getRange(
-      info.headerRow + 1,
+      info.dataStartRow,
       descriptionColumn + 1,
       availableRows,
       1
@@ -248,7 +248,7 @@ function loadSourceLookup_(sourceSheet) {
   const options = [];
   const seen = new Set();
 
-  for (let r = info.headerRow + 1; r < values.length; r++) {
+  for (let r = info.dataStartRow; r < values.length; r++) {
     const row = values[r];
 
     const description =
@@ -499,12 +499,12 @@ function applyRecommendedModeDropdown_(destinationSpreadsheet) {
     if (column === undefined) return;
 
     const availableRows =
-      sheet.getMaxRows() - info.headerRow;
+      sheet.getMaxRows() - info.dataStartRow + 1;
 
     if (availableRows <= 0) return;
 
     sheet.getRange(
-      info.headerRow + 1,
+      info.dataStartRow,
       column + 1,
       availableRows,
       1
@@ -630,7 +630,7 @@ function handleEntrySelection(e) {
 
   const firstRow = Math.max(
     range.getRow(),
-    info.headerRow + 1
+    info.dataStartRow
   );
 
   const lastRow =
@@ -1086,6 +1086,7 @@ function findDestinationHeaders_(sheet) {
   // the first match for each field so the subheader is not missed.
   const headerMap = {};
   let headerRow = null;
+  let lastHeaderRow = 0;
 
   for (let r = 0; r < values.length; r++) {
     for (let c = 0; c < values[r].length; c++) {
@@ -1106,11 +1107,11 @@ function findDestinationHeaders_(sheet) {
           ENTRY_CONFIG.DESTINATION_HEADERS[key]
         );
 
-        if (
-          normalized === expected &&
-          headerMap[expected] === undefined
-        ) {
-          headerMap[expected] = c;
+        if (normalized === expected) {
+          lastHeaderRow = Math.max(lastHeaderRow, r + 1);
+          if (headerMap[expected] === undefined) {
+            headerMap[expected] = c;
+          }
         }
       });
 
@@ -1125,11 +1126,11 @@ function findDestinationHeaders_(sheet) {
           )
         );
 
-      if (
-        looksLikeUomHeader &&
-        headerMap[uomHeader] === undefined
-      ) {
-        headerMap[uomHeader] = c;
+      if (looksLikeUomHeader) {
+        lastHeaderRow = Math.max(lastHeaderRow, r + 1);
+        if (headerMap[uomHeader] === undefined) {
+          headerMap[uomHeader] = c;
+        }
       }
     }
   }
@@ -1140,6 +1141,7 @@ function findDestinationHeaders_(sheet) {
 
   return {
     headerRow: headerRow,
+    dataStartRow: Math.max(headerRow, lastHeaderRow) + 1,
     headerMap: headerMap
   };
 }
