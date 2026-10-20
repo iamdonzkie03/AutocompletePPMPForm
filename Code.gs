@@ -315,16 +315,17 @@ function findSourceHeaders_(values) {
       'Technical Specification'
     ],
 
+    // Prefer specific UOM headers. Do not match the generic
+    // header "Unit", which can accidentally select an unrelated column.
     uom: [
-      'UOM',
-      'Unit of Measurement',
-      'Unit of Measure',
       'Unit or Measurement/Size',
       'Unit or Measurement Size',
       'Unit/Measurement/Size',
       'Unit/Measure/Size',
-      'Unit',
-      'Measurement/Size'
+      'Unit of Measurement',
+      'Unit of Measure',
+      'Measurement/Size',
+      'UOM'
     ],
 
     unitCost: [
@@ -360,14 +361,10 @@ function findSourceHeaders_(values) {
       if (!currentHeader) continue;
 
       Object.keys(aliases).forEach(function(key) {
-        const matches = aliases[key].some(function(alias) {
-          return currentHeader === normalizeHeader_(alias);
-        });
+        const normalizedAliases = aliases[key].map(normalizeHeader_);
+        const matches = normalizedAliases.indexOf(currentHeader) !== -1;
 
-        if (
-          matches &&
-          headerMap[key] === undefined
-        ) {
+        if (matches && headerMap[key] === undefined) {
           headerMap[key] = c;
         }
       });
