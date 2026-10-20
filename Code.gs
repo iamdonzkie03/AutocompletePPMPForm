@@ -259,8 +259,10 @@ function loadSourceLookup_(sourceSheet) {
 
     if (!description) continue;
 
+    // The PPMP Form description must combine the source name and
+    // technical specifications using a comma and a space.
     const option = specifications
-      ? description + ' — ' + specifications
+      ? description + ', ' + specifications
       : description;
 
     const key = normalizeValue_(option);
