@@ -338,12 +338,17 @@ function addPPMPEntryRow() {
     .build();
   sheet.getRange(newRow, modeColumn + 1).setDataValidation(modeRule);
 
-  // FINAL BORDER PASS: run after formatting, content clearing, and dropdown setup.
-  // Apply the complete table grid across A:O in one operation. This works with
-  // merged cells and avoids errors caused by applying borders to part of a merge.
-  // Rebuild the grid over the full line-item table, not just the new row.
-  // This also restores the shared horizontal/vertical separators between rows.
-  applyPPMPEntryTableBorders_(sheet, newRow);
+  // FINAL BORDER PASS: run only after formatting, clearing, and dropdown setup.
+  // Always border the complete A:O table, including the 20 initial rows and
+  // every row through the newly prepared entry. Then explicitly re-border the
+  // new row itself so its four outer edges and all cell separators are visible.
+  const borderThroughRow = Math.max(34, newRow);
+  applyPPMPEntryTableBorders_(sheet, borderThroughRow);
+  sheet.getRange(newRow, 1, 1, 15).setBorder(
+    true, true, true, true, true, true,
+    '#000000',
+    SpreadsheetApp.BorderStyle.SOLID
+  );
   SpreadsheetApp.flush();
 
   spreadsheet.setActiveSheet(sheet);
@@ -426,15 +431,16 @@ function applyPPMPEntryTableBorders_(sheet, lastRow) {
     sheet.insertRowsAfter(sheet.getMaxRows(), finalRow - sheet.getMaxRows());
   }
 
-  const table = sheet.getRange(firstRow, 1, finalRow - firstRow + 1, 15); // A:O
-  table.setBorder(
+  // First set the grid on the entire table range so every cell has
+  // solid vertical separators and every row has horizontal separators.
+  sheet.getRange(firstRow, 1, finalRow - firstRow + 1, 15).setBorder(
     true, true, true, true, true, true,
     '#000000',
     SpreadsheetApp.BorderStyle.SOLID
   );
 
-  // Explicitly reinforce each row's top and bottom edges so no new row
-  // depends on the borders inherited from the preceding row.
+  // Then force borders row-by-row. This is important for newly created rows
+  // whose formatting was copied from an unbordered or partially bordered row.
   for (let row = firstRow; row <= finalRow; row++) {
     sheet.getRange(row, 1, 1, 15).setBorder(
       true, true, true, true, true, true,
