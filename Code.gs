@@ -1086,10 +1086,8 @@ function updatePPMPSummary_(spreadsheet) {
   }
 
   const totals = new Map();
-  // PPMP Form entries begin at row 5; do not summarize header rows.
-  // Only PPMP Form line items from row 5 onward are eligible.
-  // This deliberately excludes the first four rows, including any
-  // header/summary content above the actual entries.
+  // Only PPMP Form line items from row 15 onward are included.
+  // Category comes from column C and Estimated Budget from column M.
   const firstDataRow = isPPMPForm ? 15 : 5;
   const lastDataRow = formSheet.getLastRow();
 
@@ -1137,12 +1135,17 @@ function updatePPMPSummary_(spreadsheet) {
       }
     );
 
-  const outputStartRow =
-    summaryInfo.headerRow + 1;
+  // Start output below both summary headers so values cannot land
+  // in the header area when Category and Total Amount are on different rows.
+  const summaryHeaderRow = Math.max(
+    summaryInfo.headerRow || 0,
+    summaryInfo.amountHeaderRow || 0
+  );
+  const outputStartRow = summaryHeaderRow + 1;
 
   const availableRows =
     summarySheet.getMaxRows() -
-    summaryInfo.headerRow;
+    summaryHeaderRow;
 
   if (availableRows > 0) {
     // Keep the summary output limited to its Category and total-amount
