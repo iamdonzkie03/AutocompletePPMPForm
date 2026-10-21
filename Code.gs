@@ -157,6 +157,7 @@ function setupEntryDropdownAndAutofill() {
     const handler = trigger.getHandlerFunction();
     if (
       handler === 'handleEntrySelection' ||
+      handler === 'autoSuggestEntriesOnEdit' ||
       handler === 'handlePPMPFormEdit' ||
       handler === 'handleEntriesSourceEdit' ||
       handler === 'handlePPMPRowChange'
@@ -1364,6 +1365,17 @@ function handleEntrySelection(e) {
  * including edits to category, quantity, cost, fiscal year, end-user, clearing
  * cells, and multi-cell pastes. No page reload is required.
  */
+/**
+ * Backward-compatible handler for older installable triggers.
+ * Some existing spreadsheets still reference this function name.
+ * Keep this alias so those triggers do not fail with
+ * "Script function not found: autoSuggestEntriesOnEdit".
+ */
+function autoSuggestEntriesOnEdit(e) {
+  return handlePPMPFormEdit(e);
+}
+
+
 function handlePPMPFormEdit(e) {
   if (!e || !e.range || !e.source) return;
 
