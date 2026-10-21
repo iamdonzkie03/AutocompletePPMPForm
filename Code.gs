@@ -778,6 +778,10 @@ function handleEntrySelection(e) {
       )
     ];
 
+  // PPMP Form's entry rows begin at row 5, even when the sheet has
+  // multi-row headings or a large formatted template.
+  const dataStartRow = isPPMPForm ? 5 : info.dataStartRow;
+
   const unitCostColumn =
     headerMap[
       normalizeHeader_(
@@ -847,7 +851,7 @@ function handleEntrySelection(e) {
 
   const firstRow = Math.max(
     range.getRow(),
-    info.dataStartRow
+    dataStartRow
   );
 
   const lastRow =
@@ -887,6 +891,8 @@ function handleEntrySelection(e) {
           record.category
         );
 
+        // The source Entries column UOM fills the PPMP Form's
+        // "Unit or Measurement/Size" field.
         setIfPresent_(
           sheet,
           row,
@@ -902,6 +908,10 @@ function handleEntrySelection(e) {
           ENTRY_CONFIG.DESTINATION_HEADERS.unitCost,
           record.unitCost
         );
+      } else {
+        // If the selected description no longer exists in Entries,
+        // remove stale autofilled values instead of keeping old data.
+        clearRelatedFields_(sheet, row, info);
       }
     }
 
