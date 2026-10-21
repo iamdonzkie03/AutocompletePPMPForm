@@ -206,7 +206,10 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
         : info.dataStartRow;
 
     if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
-      sheet.getRange(4, descriptionColumn + 1).clearDataValidations();
+      // Remove any legacy validation anywhere in row 4, not just the
+      // detected description column. Older versions may have applied
+      // validation to a different column or a wider range.
+      sheet.getRange(4, 1, 1, sheet.getMaxColumns()).clearDataValidations();
     }
 
     const availableRows = sheet.getMaxRows() - validationStartRow + 1;
@@ -628,7 +631,9 @@ function applyRecommendedModeDropdown_(destinationSpreadsheet) {
         : info.dataStartRow;
 
     if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
-      sheet.getRange(4, column + 1).clearDataValidations();
+      // Enforce the row-4 rule across the entire PPMP Form, including
+      // any validations left behind by earlier script versions.
+      sheet.getRange(4, 1, 1, sheet.getMaxColumns()).clearDataValidations();
     }
 
     const availableRows =
