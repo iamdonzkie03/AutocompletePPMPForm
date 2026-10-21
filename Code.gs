@@ -356,32 +356,10 @@ function applyEndUserDropdownB9_(destinationSpreadsheet, sourceSpreadsheet) {
     .setHelpText('Select an End-User or Implementing Unit from the Data List spreadsheet, End-User sheet.')
     .build();
 
-  // Prefer the input cell immediately to the right of the matching label.
-  // This handles layout changes where the End-user/Implementing Unit field
-  // moves, while preserving B9 as the known template fallback.
-  const scanRows = Math.min(14, destinationSheet.getMaxRows());
-  const scanCols = Math.min(destinationSheet.getMaxColumns(), 30);
-  const labels = destinationSheet.getRange(1, 1, scanRows, scanCols).getDisplayValues();
-  let target = null;
-  for (let r = 0; r < labels.length && !target; r++) {
-    for (let c = 0; c < labels[r].length; c++) {
-      const label = normalizeHeader_(labels[r][c]).replace(/[^a-z0-9]/g, '');
-      if (
-        label.includes('enduserorimplementingunit') ||
-        label === 'enduser' ||
-        label === 'implementingunit' ||
-        label.includes('enduserimplementingunit')
-      ) {
-        const targetColumn = c + 2;
-        if (targetColumn <= destinationSheet.getMaxColumns()) {
-          target = destinationSheet.getRange(r + 1, targetColumn);
-        }
-        break;
-      }
-    }
-  }
-
-  if (!target) target = destinationSheet.getRange('B9');
+  // The PPMP Form template's End-user or Implementing Unit field is B9.
+  // Apply the validation directly to B9 so it cannot be attached to a
+  // different cell by label detection or template wording changes.
+  const target = destinationSheet.getRange('B9');
   target.setDataValidation(rule);
 }
 
