@@ -1100,31 +1100,16 @@ function updatePPMPSummary_(spreadsheet) {
   spreadsheet =
     spreadsheet || SpreadsheetApp.getActiveSpreadsheet();
 
-  const formSheet =
-    spreadsheet.getSheetByName(
-      ENTRY_CONFIG.PPMP_FORM_SHEET
-    );
+  const formSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  const summarySheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_SUMMARY_SHEET);
 
-  const summarySheet =
-    spreadsheet.getSheetByName(
-      ENTRY_CONFIG.PPMP_SUMMARY_SHEET
-    );
+  if (!formSheet) throw new Error('The PPMP Form sheet was not found.');
+  if (!summarySheet) throw new Error('The PPMP Summary sheet was not found.');
 
-  if (!formSheet) {
-    throw new Error(
-      'The PPMP Form sheet was not found.'
-    );
-  }
+  // Keep Fiscal Year and End-User synchronized with the corresponding
+  // values in PPMP Form, using the labels on each sheet to locate the cells.
+  syncPPMPSummaryMetadata_(formSheet, summarySheet);
 
-  if (!summarySheet) {
-    throw new Error(
-      'The PPMP Summary sheet was not found.'
-    );
-  }
-
-  // PPMP Form has a fixed layout: Category is column C and
-  // Estimated Budget is column M. The summary must read those exact
-  // columns, independent of merged or repeated template headings.
   const isPPMPForm = formSheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET;
   const formInfo = isPPMPForm
     ? { headerRow: 13, categoryColumn: 3, amountColumn: 13 }
@@ -1132,9 +1117,7 @@ function updatePPMPSummary_(spreadsheet) {
        findCategoryAmountHeadersFallback_(formSheet));
 
   if (!formInfo) {
-    throw new Error(
-      'Could not identify the Category and Estimated Budget columns in PPMP Form.'
-    );
+    throw new Error('Could not identify the Category and Estimated Budget columns in PPMP Form.');
   }
 
   const summaryInfo =
@@ -1149,15 +1132,14 @@ function updatePPMPSummary_(spreadsheet) {
   }
 
   const totals = new Map();
-  // Only PPMP Form line items from row 15 onward are included.
-  // Category comes from column C and Estimated Budget from column M.
-  // For PPMP Form, never read rows 1–14. The source data range is
-  // explicitly C15:M(last row), with Category in C and Estimated Budget in M.
+  // The PPMP Form line-item table starts at row 15. Require a description
+  // in column A so stray template text such as "Category" or "Column 3"
+  // is never treated as an item/category record.
   const firstDataRow = isPPMPForm ? 15 : 5;
   const lastDataRow = formSheet.getLastRow();
 
   if (lastDataRow >= firstDataRow) {
-    const sourceStartColumn = isPPMPForm ? 3 : formInfo.categoryColumn;
+    const sourceStartColumn = isPPMPForm ? 1 : formInfo.categoryColumn;
     const sourceEndColumn = isPPMPForm ? 13 : formInfo.amountColumn;
     const data = formSheet.getRange(
       firstDataRow,
@@ -1167,69 +1149,49 @@ function updatePPMPSummary_(spreadsheet) {
     ).getValues();
 
     data.forEach(function(row) {
-      const categoryIndex = isPPMPForm ? 0 : formInfo.categoryColumn - sourceStartColumn;
-      const amountIndex = isPPMPForm ? 10 : formInfo.amountColumn - sourceStartColumn;
+      const descriptionIndex = 0;
+      const categoryIndex = isPPMPForm ? 2 : formInfo.categoryColumn - sourceStartColumn;
+      const amountIndex = isPPMPForm ? 12 : formInfo.amountColumn - sourceStartColumn;
+      const description = String(row[descriptionIndex] || '').trim();
       const category = String(row[categoryIndex] || '').trim();
 
-      // Ignore rows without a Category; they are not summary records.
-      if (!category) return;
+      if (!description || !category) return;
+
+      const normalizedCategory = normalizeHeader_(category);
+      if (normalizedCategory === 'category' || normalizedCategory === 'column3') return;
 
       const amount = parseNumericValue_(row[amountIndex]);
-
       const key = normalizeValue_(category);
 
       if (!totals.has(key)) {
-        totals.set(key, {
-          category: category,
-          total: 0
-        });
+        totals.set(key, { category: category, total: 0 });
       }
-
-      if (amount !== null) {
-        totals.get(key).total += amount;
-      }
+      if (amount !== null) totals.get(key).total += amount;
     });
   }
 
-  const results =
-    Array.from(totals.values()).sort(
-      function(a, b) {
-        return a.category.localeCompare(b.category);
-      }
-    );
+  const results = Array.from(totals.values()).sort(function(a, b) {
+    return a.category.localeCompare(b.category);
+  });
 
-  // Start output below both summary headers so values cannot land
-  // in the header area when Category and Total Amount are on different rows.
   const summaryHeaderRow = Math.max(
     summaryInfo.headerRow || 0,
     summaryInfo.amountHeaderRow || 0
   );
   const outputStartRow = summaryHeaderRow + 1;
-
-  const availableRows =
-    summarySheet.getMaxRows() -
-    summaryHeaderRow;
+  const availableRows = summarySheet.getMaxRows() - summaryHeaderRow;
 
   if (availableRows > 0) {
-    // Keep the summary output limited to its Category and total-amount
-    // columns by removing stale values from the entire data area first.
+    // Clear stale summary output, while leaving metadata above the table intact.
     summarySheet.getRange(
-      outputStartRow,
-      1,
-      availableRows,
-      summarySheet.getMaxColumns()
+      outputStartRow, 1, availableRows, summarySheet.getMaxColumns()
     ).clearContent();
   }
 
   if (results.length === 0) return;
 
-  const requiredLastRow =
-    outputStartRow + results.length - 1;
-
-  if (
-    requiredLastRow >
-    summarySheet.getMaxRows()
-  ) {
+  const requiredLastRow = outputStartRow + results.length - 1;
+  if (requiredLastRow > summarySheet.getMaxRows()) {
     summarySheet.insertRowsAfter(
       summarySheet.getMaxRows(),
       requiredLastRow - summarySheet.getMaxRows()
@@ -1237,35 +1199,65 @@ function updatePPMPSummary_(spreadsheet) {
   }
 
   summarySheet.getRange(
-    outputStartRow,
-    summaryInfo.categoryColumn,
-    results.length,
-    1
-  ).setValues(
-    results.map(function(item) {
-      return [item.category];
-    })
-  );
+    outputStartRow, summaryInfo.categoryColumn, results.length, 1
+  ).setValues(results.map(function(item) { return [item.category]; }));
 
   summarySheet.getRange(
-    outputStartRow,
-    summaryInfo.amountColumn,
-    results.length,
-    1
-  ).setValues(
-    results.map(function(item) {
-      return [item.total];
-    })
-  );
+    outputStartRow, summaryInfo.amountColumn, results.length, 1
+  ).setValues(results.map(function(item) { return [item.total]; }));
 
   summarySheet.getRange(
-    outputStartRow,
-    summaryInfo.amountColumn,
-    results.length,
-    1
+    outputStartRow, summaryInfo.amountColumn, results.length, 1
   ).setNumberFormat('#,##0.00');
 }
 
+
+/**
+ * Copies Fiscal Year and End-User values from PPMP Form to the value
+ * cells beside the matching labels in PPMP Summary. The labels may be
+ * positioned differently on the two sheets.
+ */
+function syncPPMPSummaryMetadata_(formSheet, summarySheet) {
+  const labels = [
+    { aliases: ['fiscal year', 'fiscalyear'], key: 'fiscal year' },
+    { aliases: ['end-user', 'end user', 'enduser'], key: 'end-user' }
+  ];
+
+  labels.forEach(function(item) {
+    const source = findLabelAndValueCell_(formSheet, item.aliases, 14);
+    const destination = findLabelAndValueCell_(summarySheet, item.aliases, 14);
+    if (!source || !destination) return;
+
+    const value = source.valueCell.getValue();
+    destination.valueCell.setValue(value);
+  });
+}
+
+
+/**
+ * Finds a label in the first rows of a sheet and returns its value cell,
+ * assumed to be the first cell immediately to the right of the label.
+ */
+function findLabelAndValueCell_(sheet, aliases, maxRows) {
+  const rows = Math.min(sheet.getLastRow(), maxRows);
+  const cols = sheet.getLastColumn();
+  if (!rows || !cols) return null;
+
+  const values = sheet.getRange(1, 1, rows, cols).getDisplayValues();
+  const normalizedAliases = aliases.map(normalizeHeader_);
+
+  for (let r = 0; r < values.length; r++) {
+    for (let c = 0; c < values[r].length; c++) {
+      if (normalizedAliases.indexOf(normalizeHeader_(values[r][c])) === -1) continue;
+      if (c + 1 >= sheet.getMaxColumns()) continue;
+      return {
+        labelCell: sheet.getRange(r + 1, c + 1),
+        valueCell: sheet.getRange(r + 1, c + 2)
+      };
+    }
+  }
+  return null;
+}
 
 /**
  * Fallback header finder for templates with merged or multi-line headings.
