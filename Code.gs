@@ -116,6 +116,7 @@ function setupEntryDropdownAndAutofill() {
   const ppmpFormSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
   if (!ppmpFormSheet) throw new Error('The PPMP Form sheet was not found.');
   initializePPMPEntryTable_(ppmpFormSheet);
+  removeLegacyAddEntryRowLabel_(ppmpFormSheet);
 
   if (sourceData.options.length === 0) {
     throw new Error(
@@ -435,6 +436,46 @@ function applyPPMPEntryTableBorders_(sheet, lastRow) {
     );
   }
   SpreadsheetApp.flush();
+}
+
+/**
+ * Removes the old ＋ ADD ENTRY ROW label that may already exist in the
+ * spreadsheet from an earlier version of this script. Removing the code
+ * that created it does not erase the cell value that was previously written.
+ */
+function removeLegacyAddEntryRowLabel_(sheet) {
+  if (!sheet) return 0;
+  const usedRange = sheet.getDataRange();
+  const values = usedRange.getDisplayValues();
+  let removed = 0;
+
+  for (let r = 0; r < values.length; r++) {
+    for (let col = 0; col < values[r].length; col++) {
+      const value = String(values[r][col] || '').trim();
+      if (/^＋?\s*ADD ENTRY ROW$/i.test(value)) {
+        const cell = sheet.getRange(r + 1, col + 1);
+        cell.clearContent();
+        cell.setBackground(null);
+        cell.setFontWeight('normal');
+        cell.clearNote();
+        removed++;
+      }
+    }
+  }
+  SpreadsheetApp.flush();
+  return removed;
+}
+
+/**
+ * Run this function once to remove the old label immediately.
+ */
+function removeAddEntryRowLabel() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (!spreadsheet) throw new Error('Open the destination spreadsheet first.');
+  const sheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  if (!sheet) throw new Error('The PPMP Form sheet was not found.');
+  const removed = removeLegacyAddEntryRowLabel_(sheet);
+  spreadsheet.toast('Removed ' + removed + ' old Add Entry Row label(s).', 'PPMP Form', 5);
 }
 
 /***************************************************************
