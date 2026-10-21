@@ -1585,7 +1585,12 @@ function updatePPMPSummary_(spreadsheet) {
     ).clearContent();
   }
 
-  if (results.length === 0) return;
+  // Commit cleared output and synchronized Fiscal Year/End-User immediately,
+  // including when the PPMP Form currently has no completed entries.
+  if (results.length === 0) {
+    SpreadsheetApp.flush();
+    return;
+  }
 
   // Reserve one additional row after the category breakdown for GRAND TOTAL.
   const grandTotal = results.reduce(function(sum, item) {
@@ -1630,6 +1635,9 @@ function updatePPMPSummary_(spreadsheet) {
     .setNumberFormat('#,##0.00')
     .setFontSize(14)
     .setFontWeight('bold');
+
+  // Make summary writes visible immediately without requiring a browser reload.
+  SpreadsheetApp.flush();
 }
 
 
