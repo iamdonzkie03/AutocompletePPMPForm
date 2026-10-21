@@ -257,7 +257,9 @@ function addPPMPEntryRow() {
 
   let helperSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.HELPER_SHEET_NAME);
   if (!helperSheet) helperSheet = spreadsheet.insertSheet(ENTRY_CONFIG.HELPER_SHEET_NAME);
-  helperSheet.clearContents();
+  // Column A is reserved for project descriptions. Do not clear column B,
+  // which stores the End-User choices used by PPMP Form!B9:D9 validation.
+  helperSheet.getRange(1, 1, helperSheet.getMaxRows(), 1).clearContent();
   helperSheet.getRange(1, 1, sourceData.options.length, 1)
     .setValues(sourceData.options.map(function(value) { return [value]; }));
   if (!helperSheet.isSheetHidden()) helperSheet.hideSheet();
