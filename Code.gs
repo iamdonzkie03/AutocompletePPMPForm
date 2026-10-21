@@ -1218,45 +1218,15 @@ function updatePPMPSummary_(spreadsheet) {
  * positioned differently on the two sheets.
  */
 function syncPPMPSummaryMetadata_(formSheet, summarySheet) {
-  const labels = [
-    { aliases: ['fiscal year', 'fiscalyear'], key: 'fiscal year' },
-    { aliases: ['end-user', 'end user', 'enduser'], key: 'end-user' }
-  ];
-
-  labels.forEach(function(item) {
-    const source = findLabelAndValueCell_(formSheet, item.aliases, 14);
-    const destination = findLabelAndValueCell_(summarySheet, item.aliases, 14);
-    if (!source || !destination) return;
-
-    const value = source.valueCell.getValue();
-    destination.valueCell.setValue(value);
+  // These fields use fixed cells in the PPMP template. The End-User
+  // dropdown is explicitly located in PPMP Form!B9; Fiscal Year is B8.
+  // Copy the displayed values to the same cells in PPMP Summary so this
+  // works even when the template labels are merged or formatted differently.
+  ['B8', 'B9'].forEach(function(address) {
+    const sourceCell = formSheet.getRange(address);
+    const destinationCell = summarySheet.getRange(address);
+    destinationCell.setValue(sourceCell.getValue());
   });
-}
-
-
-/**
- * Finds a label in the first rows of a sheet and returns its value cell,
- * assumed to be the first cell immediately to the right of the label.
- */
-function findLabelAndValueCell_(sheet, aliases, maxRows) {
-  const rows = Math.min(sheet.getLastRow(), maxRows);
-  const cols = sheet.getLastColumn();
-  if (!rows || !cols) return null;
-
-  const values = sheet.getRange(1, 1, rows, cols).getDisplayValues();
-  const normalizedAliases = aliases.map(normalizeHeader_);
-
-  for (let r = 0; r < values.length; r++) {
-    for (let c = 0; c < values[r].length; c++) {
-      if (normalizedAliases.indexOf(normalizeHeader_(values[r][c])) === -1) continue;
-      if (c + 1 >= sheet.getMaxColumns()) continue;
-      return {
-        labelCell: sheet.getRange(r + 1, c + 1),
-        valueCell: sheet.getRange(r + 1, c + 2)
-      };
-    }
-  }
-  return null;
 }
 
 /**
