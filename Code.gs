@@ -157,7 +157,8 @@ function setupEntryDropdownAndAutofill() {
     const handler = trigger.getHandlerFunction();
     if (
       handler === 'handleEntrySelection' ||
-      handler === 'handleEntriesSourceEdit'
+      handler === 'handleEntriesSourceEdit' ||
+      handler === 'handlePPMPRowChange'
     ) {
       ScriptApp.deleteTrigger(trigger);
     }
@@ -171,6 +172,12 @@ function setupEntryDropdownAndAutofill() {
   ScriptApp.newTrigger('handleEntriesSourceEdit')
     .forSpreadsheet(sourceSpreadsheet)
     .onEdit()
+    .create();
+
+  // Watch manually inserted/deleted sheet rows and rebuild the PPMP table grid.
+  ScriptApp.newTrigger('handlePPMPRowChange')
+    .forSpreadsheet(spreadsheet)
+    .onChange()
     .create();
 
   // Populate PPMP Summary immediately.
@@ -1325,6 +1332,41 @@ function handleEntrySelection(e) {
   }
 }
 
+
+/**
+ * Installable on-change handler: when rows are inserted into the destination
+ * spreadsheet, rebuild the PPMP Form borders across A:O. This complements
+ * addPPMPEntryRow(), which also applies borders after preparing its new row.
+ */
+function handlePPMPRowChange(e) {
+  if (!e || !e.source || e.changeType !== 'INSERT_ROW') return;
+  const spreadsheet = e.source;
+  const sheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  if (!sheet) return;
+
+  // Rebuild the initial 20 rows and all rows currently used by the table.
+  // Use the active sheet's row count because inserted rows may shift the table.
+  const info = findDestinationHeaders_(sheet);
+  const descriptionColumn = info
+    ? info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.description)] + 1
+    : 1;
+  const lastEntryRow = findLastDescriptionEntryRow_(sheet, descriptionColumn, 15);
+  applyPPMPEntryTableBorders_(sheet, Math.max(34, lastEntryRow));
+  SpreadsheetApp.flush();
+}
+
+/**
+ * Manually repair the complete PPMP Form table border grid (A:O).
+ */
+function repairPPMPEntryTableBorders() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (!spreadsheet) throw new Error('Open the destination spreadsheet first.');
+  const sheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  if (!sheet) throw new Error('The PPMP Form sheet was not found.');
+  const lastRow = Math.max(34, sheet.getLastRow());
+  applyPPMPEntryTableBorders_(sheet, lastRow);
+  spreadsheet.toast('PPMP Form table borders refreshed for rows 15–' + lastRow + '.', 'PPMP Form', 5);
+}
 
 /***************************************************************
  * CLEAR RELATED FIELDS
