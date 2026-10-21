@@ -112,6 +112,8 @@ function setupEntryDropdownAndAutofill() {
     spreadsheet.getId()
   );
 
+  applyEndUserDropdownB9_(spreadsheet, sourceSpreadsheet);
+
   const descriptionDropdownsApplied =
     refreshEntryDropdownOptions_(spreadsheet, sourceData);
 
@@ -164,6 +166,62 @@ function setupEntryDropdownAndAutofill() {
   );
 }
 
+
+
+/***************************************************************
+ * END-USER DROPDOWN IN PPMP FORM B9
+ * Uses all nonblank values in column A, starting at row 2, from
+ * the external Data List spreadsheet's End-User worksheet.
+ ***************************************************************/
+function applyEndUserDropdownB9_(destinationSpreadsheet, sourceSpreadsheet) {
+  const sourceSheet = sourceSpreadsheet.getSheetByName('End-User');
+  if (!sourceSheet) {
+    throw new Error('Source worksheet "End-User" was not found in the Data List spreadsheet.');
+  }
+
+  const destinationSheet = destinationSpreadsheet.getSheetByName('PPMP Form');
+  if (!destinationSheet) {
+    throw new Error('The PPMP Form worksheet was not found.');
+  }
+
+  const lastRow = sourceSheet.getLastRow();
+  const values = lastRow >= 2
+    ? sourceSheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues()
+    : [];
+  const options = [];
+  const seen = new Set();
+  values.forEach(function(row) {
+    const value = String(row[0] || '').trim();
+    if (!value) return;
+    const key = normalizeValue_(value);
+    if (seen.has(key)) return;
+    seen.add(key);
+    options.push(value);
+  });
+
+  const cell = destinationSheet.getRange('B9');
+  cell.clearDataValidations();
+  if (!options.length) {
+    throw new Error('No End-User items were found in column A from row 2 onward.');
+  }
+
+  // Data validation lists cannot directly reference a different spreadsheet,
+  // so copy the choices into helper column B in the destination spreadsheet.
+  let helperSheet = destinationSpreadsheet.getSheetByName('_EntryDropdownOptions');
+  if (!helperSheet) helperSheet = destinationSpreadsheet.insertSheet('_EntryDropdownOptions');
+  helperSheet.getRange(1, 2, helperSheet.getMaxRows(), 1).clearContent();
+  helperSheet.getRange(1, 2, options.length, 1).setValues(options.map(function(value) {
+    return [value];
+  }));
+  if (!helperSheet.isSheetHidden()) helperSheet.hideSheet();
+
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(helperSheet.getRange(1, 2, options.length, 1), true)
+    .setAllowInvalid(false)
+    .setHelpText('Select an End-User from the Data List End-User worksheet.')
+    .build();
+  cell.setDataValidation(rule);
+}
 
 /***************************************************************
  * REFRESH DROPDOWN OPTIONS
