@@ -1027,6 +1027,9 @@ function handleEntrySelection(e) {
     range.getValue() === true &&
     range.getRow() >= 15
   ) {
+    // Clear the checked control first so it is not mistaken for a project
+    // description when addPPMPEntryRow locates the next blank line-item row.
+    range.clearContent();
     addPPMPEntryRow();
     return;
   }
