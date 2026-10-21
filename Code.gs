@@ -26,7 +26,10 @@ const ENTRY_CONFIG = {
   MODES_SHEET_NAME: 'Modes',
   MODES_COLUMN: 1,
   MODES_START_ROW: 1,
-  HEADER_SEARCH_ROWS: 10,
+  // The PPMP template has title and multi-row table headings above
+  // the actual field labels (the entry area starts around row 15).
+  // Search deep enough to discover those labels reliably.
+  HEADER_SEARCH_ROWS: 30,
 
   SOURCE_HEADERS: {
     description: 'General Description/Generic Name',
