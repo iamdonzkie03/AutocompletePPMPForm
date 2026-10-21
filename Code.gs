@@ -370,20 +370,13 @@ function applyEndUserDropdownB9_(destinationSpreadsheet, sourceSpreadsheet) {
     throw new Error('No End-User items were found in column A from row 2 onward in the Data List End-User sheet.');
   }
 
-  // Keep the source choices in helper column B. Column A is used by the
-  // project-description dropdown, so the two lists do not overwrite each other.
-  let helperSheet = destinationSpreadsheet.getSheetByName('_EntryDropdownOptions');
-  if (!helperSheet) helperSheet = destinationSpreadsheet.insertSheet('_EntryDropdownOptions');
-  helperSheet.getRange(1, 2, helperSheet.getMaxRows(), 1).clearContent();
-  helperSheet.getRange(1, 2, options.length, 1).setValues(options.map(function(value) {
-    return [value];
-  }));
-  if (!helperSheet.isSheetHidden()) helperSheet.hideSheet();
-
+  // Use an explicit dropdown list copied directly from the source values.
+  // This avoids dependencies on the hidden helper sheet, which is also used
+  // by the project-description dropdown and may be refreshed independently.
   const rule = SpreadsheetApp.newDataValidation()
-    .requireValueInRange(helperSheet.getRange(1, 2, options.length, 1), true)
+    .requireValueInList(options, true)
     .setAllowInvalid(false)
-    .setHelpText('Select an End-User or Implementing Unit from the Data List spreadsheet, End-User sheet.')
+    .setHelpText('Select an End-User or Implementing Unit from Data List > End-User.')
     .build();
 
   // The End-user or Implementing Unit input is a merged range B9:D9.
