@@ -1190,7 +1190,12 @@ function updatePPMPSummary_(spreadsheet) {
 
   if (results.length === 0) return;
 
-  const requiredLastRow = outputStartRow + results.length - 1;
+  // Reserve one additional row after the category breakdown for GRAND TOTAL.
+  const grandTotal = results.reduce(function(sum, item) {
+    return sum + item.total;
+  }, 0);
+  const grandTotalRow = outputStartRow + results.length;
+  const requiredLastRow = grandTotalRow;
   if (requiredLastRow > summarySheet.getMaxRows()) {
     summarySheet.insertRowsAfter(
       summarySheet.getMaxRows(),
@@ -1198,17 +1203,29 @@ function updatePPMPSummary_(spreadsheet) {
     );
   }
 
-  summarySheet.getRange(
-    outputStartRow, summaryInfo.categoryColumn, results.length, 1
-  ).setValues(results.map(function(item) { return [item.category]; }));
+  if (results.length > 0) {
+    summarySheet.getRange(
+      outputStartRow, summaryInfo.categoryColumn, results.length, 1
+    ).setValues(results.map(function(item) { return [item.category]; }));
 
-  summarySheet.getRange(
-    outputStartRow, summaryInfo.amountColumn, results.length, 1
-  ).setValues(results.map(function(item) { return [item.total]; }));
+    summarySheet.getRange(
+      outputStartRow, summaryInfo.amountColumn, results.length, 1
+    ).setValues(results.map(function(item) { return [item.total]; }));
 
-  summarySheet.getRange(
-    outputStartRow, summaryInfo.amountColumn, results.length, 1
-  ).setNumberFormat('#,##0.00');
+    summarySheet.getRange(
+      outputStartRow, summaryInfo.amountColumn, results.length, 1
+    ).setNumberFormat('#,##0.00');
+  }
+
+  // Put GRAND TOTAL immediately below the last category and its sum in the
+  // adjacent Total Amount column. Clear-and-rebuild above prevents stale totals.
+  summarySheet.getRange(grandTotalRow, summaryInfo.categoryColumn)
+    .setValue('GRAND TOTAL')
+    .setFontWeight('bold');
+  summarySheet.getRange(grandTotalRow, summaryInfo.amountColumn)
+    .setValue(grandTotal)
+    .setNumberFormat('#,##0.00')
+    .setFontWeight('bold');
 }
 
 
