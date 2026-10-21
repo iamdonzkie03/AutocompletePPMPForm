@@ -1204,27 +1204,34 @@ function updatePPMPSummary_(spreadsheet) {
   }
 
   if (results.length > 0) {
-    summarySheet.getRange(
+    const categoryOutputRange = summarySheet.getRange(
       outputStartRow, summaryInfo.categoryColumn, results.length, 1
-    ).setValues(results.map(function(item) { return [item.category]; }));
+    );
+    categoryOutputRange
+      .setValues(results.map(function(item) { return [item.category]; }))
+      .setFontSize(11)
+      .setFontWeight('normal');
 
-    summarySheet.getRange(
+    const amountOutputRange = summarySheet.getRange(
       outputStartRow, summaryInfo.amountColumn, results.length, 1
-    ).setValues(results.map(function(item) { return [item.total]; }));
-
-    summarySheet.getRange(
-      outputStartRow, summaryInfo.amountColumn, results.length, 1
-    ).setNumberFormat('#,##0.00');
+    );
+    amountOutputRange
+      .setValues(results.map(function(item) { return [item.total]; }))
+      .setNumberFormat('#,##0.00')
+      .setFontSize(11)
+      .setFontWeight('normal');
   }
 
   // Put GRAND TOTAL immediately below the last category and its sum in the
   // adjacent Total Amount column. Clear-and-rebuild above prevents stale totals.
   summarySheet.getRange(grandTotalRow, summaryInfo.categoryColumn)
     .setValue('GRAND TOTAL')
+    .setFontSize(14)
     .setFontWeight('bold');
   summarySheet.getRange(grandTotalRow, summaryInfo.amountColumn)
     .setValue(grandTotal)
     .setNumberFormat('#,##0.00')
+    .setFontSize(14)
     .setFontWeight('bold');
 }
 
