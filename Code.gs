@@ -198,7 +198,18 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
     ];
     if (descriptionColumn === undefined || sourceData.options.length === 0) return;
 
-    const availableRows = sheet.getMaxRows() - info.dataStartRow + 1;
+    // PPMP Form data validation must always begin at row 5.
+    // Clear any older validation accidentally left in row 4.
+    const validationStartRow =
+      sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
+        ? 5
+        : info.dataStartRow;
+
+    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
+      sheet.getRange(4, descriptionColumn + 1).clearDataValidations();
+    }
+
+    const availableRows = sheet.getMaxRows() - validationStartRow + 1;
     if (availableRows <= 0) return;
 
     const rule = SpreadsheetApp.newDataValidation()
@@ -208,7 +219,7 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
       .build();
 
     sheet.getRange(
-      info.dataStartRow, descriptionColumn + 1, availableRows, 1
+      validationStartRow, descriptionColumn + 1, availableRows, 1
     ).setDataValidation(rule);
 
     updated++;
@@ -610,13 +621,23 @@ function applyRecommendedModeDropdown_(destinationSpreadsheet) {
 
     if (column === undefined) return;
 
+    // Keep PPMP Form dropdown validation out of row 4.
+    const validationStartRow =
+      sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
+        ? 5
+        : info.dataStartRow;
+
+    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
+      sheet.getRange(4, column + 1).clearDataValidations();
+    }
+
     const availableRows =
-      sheet.getMaxRows() - info.dataStartRow + 1;
+      sheet.getMaxRows() - validationStartRow + 1;
 
     if (availableRows <= 0) return;
 
     sheet.getRange(
-      info.dataStartRow,
+      validationStartRow,
       column + 1,
       availableRows,
       1
