@@ -73,7 +73,6 @@ const ENTRY_CONFIG = {
 function onOpen(e) {
   SpreadsheetApp.getUi()
     .createMenu('PPMP Form')
-    .addItem('Add Entry Row', 'addPPMPEntryRow')
     .addItem('Refresh End-User Dropdown (B9)', 'refreshEndUserDropdownB9')
     .addToUi();
 }
@@ -169,6 +168,10 @@ function setupEntryDropdownAndAutofill() {
     .forSpreadsheet(sourceSpreadsheet)
     .onEdit()
     .create();
+
+  // Place the functional Add Entry Row control immediately below the
+  // last populated line item in the PPMP Form table.
+  createAddEntryRowControl_(ppmpFormSheet);
 
   // Populate PPMP Summary immediately.
   updatePPMPSummary_(spreadsheet);
@@ -307,6 +310,40 @@ function addPPMPEntryRow() {
   return newRow;
 }
 
+
+/**
+ * Adds a checkbox-based Add Entry Row control below the last populated
+ * PPMP line item. Checking it invokes addPPMPEntryRow via the existing
+ * installable edit trigger; this avoids a custom menu command.
+ */
+function createAddEntryRowControl_(sheet) {
+  if (!sheet) return;
+  const firstEntryRow = 15;
+  const lastDescriptionRow = findLastDescriptionEntryRow_(sheet, 1, firstEntryRow);
+  const controlRow = Math.max(firstEntryRow, lastDescriptionRow + 1);
+
+  // Ensure a blank row exists below the last item.
+  if (controlRow > sheet.getMaxRows()) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), controlRow - sheet.getMaxRows());
+  }
+
+  const controlCell = sheet.getRange(controlRow, 1);
+  const labelCell = sheet.getRange(controlRow, 2);
+  controlCell.clearContent().clearDataValidations();
+  controlCell.insertCheckboxes();
+  controlCell.setValue(false);
+  controlCell.setHorizontalAlignment('center');
+  controlCell.setVerticalAlignment('middle');
+  controlCell.setBackground('#d9ead3');
+  controlCell.setNote('Check this box to add a new PPMP entry row.');
+  labelCell.setValue('＋ ADD ENTRY ROW');
+  labelCell.setFontWeight('bold');
+  labelCell.setHorizontalAlignment('left');
+  labelCell.setVerticalAlignment('middle');
+  labelCell.setBackground('#d9ead3');
+  labelCell.setNote('Check the box in column A to add a new entry row.');
+  sheet.setRowHeight(controlRow, Math.max(28, sheet.getRowHeight(controlRow)));
+}
 
 /***************************************************************
  * STANDALONE REPAIR FOR PPMP FORM!B9
@@ -980,6 +1017,20 @@ function handleEntrySelection(e) {
     sheet.getName() ===
     ENTRY_CONFIG.PPMP_FORM_SHEET;
 
+  // The checkbox below the table acts as the visible Add Entry Row control.
+  // addPPMPEntryRow clears that control row and converts it into a new item row.
+  if (
+    isPPMPForm &&
+    range.getNumRows() === 1 &&
+    range.getNumColumns() === 1 &&
+    range.getColumn() === 1 &&
+    range.getValue() === true &&
+    range.getRow() >= 15
+  ) {
+    addPPMPEntryRow();
+    return;
+  }
+
   const info = findDestinationHeaders_(sheet);
 
   if (!info) {
@@ -1152,6 +1203,7 @@ function handleEntrySelection(e) {
   if (isPPMPForm) {
     SpreadsheetApp.flush();
     updatePPMPSummary_(spreadsheet);
+    createAddEntryRowControl_(sheet);
   }
 }
 
