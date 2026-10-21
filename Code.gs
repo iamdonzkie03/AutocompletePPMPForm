@@ -220,7 +220,23 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
       sheet.getRange(4, 1, 1, sheet.getMaxColumns()).clearDataValidations();
     }
 
-    const availableRows = sheet.getMaxRows() - validationStartRow + 1;
+    // On PPMP Form, validation must end at the last row that actually
+    // contains a project description. Remove old rules below that row.
+    const validationEndRow =
+      sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
+        ? findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, 5)
+        : sheet.getMaxRows();
+
+    const availableRows = validationEndRow - validationStartRow + 1;
+    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET) {
+      const clearFromRow = Math.max(5, validationEndRow + 1);
+      if (clearFromRow <= sheet.getMaxRows()) {
+        sheet.getRange(
+          clearFromRow, descriptionColumn + 1,
+          sheet.getMaxRows() - clearFromRow + 1, 1
+        ).clearDataValidations();
+      }
+    }
     if (availableRows <= 0) return;
 
     const rule = SpreadsheetApp.newDataValidation()
@@ -243,6 +259,29 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
   });
 
   return updated;
+}
+
+
+/**
+ * Returns the last row at or below startRow containing a nonblank
+ * description. If there are no descriptions, returns startRow - 1.
+ */
+function findLastDescriptionEntryRow_(sheet, descriptionColumn, startRow) {
+  const lastSheetRow = sheet.getLastRow();
+  if (lastSheetRow < startRow) return startRow - 1;
+
+  const values = sheet.getRange(
+    startRow, descriptionColumn,
+    lastSheetRow - startRow + 1, 1
+  ).getDisplayValues();
+
+  for (let i = values.length - 1; i >= 0; i--) {
+    if (String(values[i][0] || '').trim() !== '') {
+      return startRow + i;
+    }
+  }
+
+  return startRow - 1;
 }
 
 
@@ -650,8 +689,28 @@ function applyRecommendedModeDropdown_(destinationSpreadsheet) {
       sheet.getRange(4, 1, 1, sheet.getMaxColumns()).clearDataValidations();
     }
 
+    // Match mode validation to the last populated description row.
+    const descriptionColumn = info.headerMap[
+      normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.description)
+    ];
+    const validationEndRow =
+      sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET &&
+      descriptionColumn !== undefined
+        ? findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, 5)
+        : sheet.getMaxRows();
+
     const availableRows =
-      sheet.getMaxRows() - validationStartRow + 1;
+      validationEndRow - validationStartRow + 1;
+
+    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET) {
+      const clearFromRow = Math.max(5, validationEndRow + 1);
+      if (clearFromRow <= sheet.getMaxRows()) {
+        sheet.getRange(
+          clearFromRow, column + 1,
+          sheet.getMaxRows() - clearFromRow + 1, 1
+        ).clearDataValidations();
+      }
+    }
 
     if (availableRows <= 0) return;
 
