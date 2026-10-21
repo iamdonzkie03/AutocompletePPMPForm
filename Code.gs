@@ -113,6 +113,10 @@ function setupEntryDropdownAndAutofill() {
   const sourceData =
     loadSourceLookup_(sourceSheet);
 
+  const ppmpFormSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  if (!ppmpFormSheet) throw new Error('The PPMP Form sheet was not found.');
+  initializePPMPEntryTable_(ppmpFormSheet);
+
   if (sourceData.options.length === 0) {
     throw new Error(
       'No project descriptions were found in the Entries worksheet.'
@@ -135,7 +139,6 @@ function setupEntryDropdownAndAutofill() {
 
   // Enforce PPMP Form validation boundaries after all dropdown routines:
   // Row 15 is the first entry row. Never leave validations above it.
-  const ppmpFormSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
   if (ppmpFormSheet && ppmpFormSheet.getMaxRows() >= 14) {
     // Clear unwanted validations above the line-item table, but B9 is
     // an intentional End-User dropdown and must be applied afterward.
@@ -377,10 +380,44 @@ function applyPPMPEntryRowBorders_(sheet, row) {
  * Applying borders to a multi-row A:O range creates both internal vertical
  * separators and horizontal row lines; then each row gets an explicit edge pass.
  */
+/**
+ * Ensures the PPMP Form starts with 20 visible entry rows (15–34).
+ * Copies only formatting and validation from row 15 to the remaining
+ * initial rows, so existing entries are never overwritten.
+ */
+function initializePPMPEntryTable_(sheet) {
+  if (!sheet) throw new Error('PPMP Form sheet is required.');
+  const firstRow = 15;
+  const initialLastRow = 34;
+  const tableColumns = 15; // A:O
+
+  if (sheet.getMaxRows() < initialLastRow) {
+    sheet.insertRowsAfter(
+      sheet.getMaxRows(),
+      initialLastRow - sheet.getMaxRows()
+    );
+  }
+
+  const template = sheet.getRange(firstRow, 1, 1, tableColumns);
+  for (let row = firstRow + 1; row <= initialLastRow; row++) {
+    const target = sheet.getRange(row, 1, 1, tableColumns);
+    template.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+    template.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+  }
+
+  applyPPMPEntryTableBorders_(sheet, initialLastRow);
+}
+
+/**
+ * Reapply the complete PPMP Form table grid from row 15 through at least row 34.
+ * Applying borders to a multi-row A:O range creates both internal vertical
+ * separators and horizontal row lines; then each row gets an explicit edge pass.
+ */
 function applyPPMPEntryTableBorders_(sheet, lastRow) {
   if (!sheet) throw new Error('PPMP Form sheet is required to apply table borders.');
   const firstRow = 15;
-  const finalRow = Math.max(firstRow, Number(lastRow) || firstRow);
+  const initialLastRow = 34; // 20 initial entry rows: 15 through 34
+  const finalRow = Math.max(initialLastRow, Number(lastRow) || firstRow);
   if (finalRow > sheet.getMaxRows()) {
     sheet.insertRowsAfter(sheet.getMaxRows(), finalRow - sheet.getMaxRows());
   }
@@ -426,8 +463,10 @@ function showAddEntryRowControl() {
 function createAddEntryRowControl_(sheet) {
   if (!sheet) return;
   const firstEntryRow = 15;
+  const initialLastRow = 34;
   const lastDescriptionRow = findLastDescriptionEntryRow_(sheet, 1, firstEntryRow);
-  const controlRow = Math.max(firstEntryRow, lastDescriptionRow + 1);
+  // Keep the control below the 20 preallocated table rows; never overwrite row 15–34.
+  const controlRow = Math.max(initialLastRow + 1, lastDescriptionRow + 1);
 
   // Keep the Add Entry Row label below the last populated item, without a checkbox.
   if (controlRow > sheet.getMaxRows()) {
@@ -581,7 +620,7 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
     // contains a project description. Remove old rules below that row.
     const validationEndRow =
       sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
-        ? findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, info.dataStartRow)
+        ? Math.max(34, findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, info.dataStartRow))
         : sheet.getMaxRows();
 
     const availableRows = validationEndRow - validationStartRow + 1;
@@ -1055,7 +1094,7 @@ function applyRecommendedModeDropdown_(destinationSpreadsheet) {
     const validationEndRow =
       sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET &&
       descriptionColumn !== undefined
-        ? findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, info.dataStartRow)
+        ? Math.max(34, findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, info.dataStartRow))
         : sheet.getMaxRows();
 
     const availableRows =
