@@ -166,12 +166,8 @@ function setupEntryDropdownAndAutofill() {
     }
   });
 
-  // One dedicated edit trigger runs PPMP autofill/calculations first, then
-  // always rebuilds PPMP Summary for every edit made on the PPMP Form sheet.
-  ScriptApp.newTrigger('handlePPMPFormEdit')
-    .forSpreadsheet(spreadsheet)
-    .onEdit()
-    .create();
+  // PPMP Form edits are handled by the bound simple onEdit(e) trigger.
+  // Keep an installable trigger only for the separate source Entries sheet.
 
   ScriptApp.newTrigger('handleEntriesSourceEdit')
     .forSpreadsheet(sourceSpreadsheet)
@@ -1373,6 +1369,20 @@ function handleEntrySelection(e) {
  */
 function autoSuggestEntriesOnEdit(e) {
   return handlePPMPFormEdit(e);
+}
+
+
+/**
+ * Simple edit trigger for the spreadsheet this script is bound to.
+ * This ensures PPMP Form edits are processed even if an old installable
+ * trigger was missing or still pointed to a deleted handler.
+ */
+function onEdit(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET) {
+    handlePPMPFormEdit(e);
+  }
 }
 
 
