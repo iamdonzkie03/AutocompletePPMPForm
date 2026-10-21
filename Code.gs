@@ -1346,18 +1346,30 @@ function handleEntrySelection(e) {
  */
 function handlePPMPRowChange(e) {
   if (!e || !e.source || e.changeType !== 'INSERT_ROW') return;
+
   const spreadsheet = e.source;
   const sheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
   if (!sheet) return;
 
-  // Rebuild the initial 20 rows and all rows currently used by the table.
-  // Use the active sheet's row count because inserted rows may shift the table.
+  // Google Sheets' onChange event does not provide the inserted row number.
+  // Therefore, border the full initial table plus a buffer beyond the last
+  // used row. This catches blank rows inserted directly below the current
+  // data, including when multiple rows are inserted at once.
   const info = findDestinationHeaders_(sheet);
-  const descriptionColumn = info
-    ? info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.description)] + 1
+  const descriptionIndex = info
+    ? info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.description)]
+    : undefined;
+  const descriptionColumn = Number.isInteger(descriptionIndex)
+    ? descriptionIndex + 1
     : 1;
   const lastEntryRow = findLastDescriptionEntryRow_(sheet, descriptionColumn, 15);
-  applyPPMPEntryTableBorders_(sheet, Math.max(34, lastEntryRow));
+  const lastUsedRow = Math.max(sheet.getLastRow(), lastEntryRow, 34);
+  const borderThroughRow = Math.min(
+    sheet.getMaxRows(),
+    Math.max(34, lastUsedRow + 25)
+  );
+
+  applyPPMPEntryTableBorders_(sheet, borderThroughRow);
   SpreadsheetApp.flush();
 }
 
