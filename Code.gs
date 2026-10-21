@@ -112,8 +112,6 @@ function setupEntryDropdownAndAutofill() {
     spreadsheet.getId()
   );
 
-  applyEndUserDropdownB9_(spreadsheet, sourceSpreadsheet);
-
   const descriptionDropdownsApplied =
     refreshEntryDropdownOptions_(spreadsheet, sourceData);
 
@@ -125,8 +123,15 @@ function setupEntryDropdownAndAutofill() {
   // Row 15 is the first entry row. Never leave validations above it.
   const ppmpFormSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
   if (ppmpFormSheet && ppmpFormSheet.getMaxRows() >= 14) {
+    // Clear unwanted validations above the line-item table, but B9 is
+    // an intentional End-User dropdown and must be applied afterward.
     ppmpFormSheet.getRange(1, 1, 14, ppmpFormSheet.getMaxColumns()).clearDataValidations();
   }
+
+  // Apply B9 last: the helper list must be written after the general
+  // dropdown refresh clears the helper sheet, and after row 1–14 rules
+  // are cleared so the End-User validation is not accidentally removed.
+  applyEndUserDropdownB9_(spreadsheet, sourceSpreadsheet);
 
   // Recreate both installable edit triggers:
   // 1) edits inside PPMP Form; 2) edits inside the external Entries sheet.
