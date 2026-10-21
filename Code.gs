@@ -1467,85 +1467,100 @@ function handlePPMPFormEdit(e) {
  * merged and multi-row headers that can be ambiguous.
  */
 function processPPMPFormEditDirect_(e, spreadsheet) {
-  const range = e.range;
-  const sheet = range.getSheet();
-  if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) return;
+  const editedRange = e.range;
+  const sheet = editedRange.getSheet();
+  if (!sheet || sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) return;
 
-  const firstRow = range.getRow();
-  const lastRow = firstRow + range.getNumRows() - 1;
-  const firstCol = range.getColumn();
-  const lastCol = firstCol + range.getNumColumns() - 1;
-  const touches = function(col) {
-    return firstCol <= col && lastCol >= col;
-  };
+  const firstRow = editedRange.getRow();
+  const lastRow = firstRow + editedRange.getNumRows() - 1;
+  const firstCol = editedRange.getColumn();
+  const lastCol = firstCol + editedRange.getNumColumns() - 1;
+  if (lastRow < 15) return;
 
-  // Only process line-item rows for item/quantity/cost edits.
-  if (lastRow >= 15) {
-    const startRow = Math.max(15, firstRow);
-    const descriptionChanged = touches(1);
-    const quantityOrCostChanged = touches(4) || touches(12);
+  const sourceSpreadsheet = SpreadsheetApp.openById(ENTRY_CONFIG.SOURCE_SPREADSHEET_ID);
+  const sourceSheet = sourceSpreadsheet.getSheetByName(ENTRY_CONFIG.SOURCE_SHEET_NAME);
+  if (!sourceSheet) throw new Error('The source Entries worksheet was not found.');
+  const sourceData = loadSourceLookup_(sourceSheet);
+  const lookup = sourceData.lookup;
 
-    let lookup = null;
-    if (descriptionChanged) {
-      const sourceSpreadsheet = SpreadsheetApp.openById(
-        ENTRY_CONFIG.SOURCE_SPREADSHEET_ID
-      );
-      const sourceSheet = sourceSpreadsheet.getSheetByName(
-        ENTRY_CONFIG.SOURCE_SHEET_NAME
-      );
-      if (!sourceSheet) throw new Error('The source Entries worksheet was not found.');
-      lookup = loadSourceLookup_(sourceSheet).lookup;
+  // Prefer the column that was actually edited if its value matches an
+  // Entries option. This avoids silently depending on a guessed column when
+  // a copied/merged PPMP template places the dropdown elsewhere.
+  for (let row = Math.max(15, firstRow); row <= lastRow; row++) {
+    let selectedCell = null;
+    let record = null;
+
+    for (let col = firstCol; col <= lastCol; col++) {
+      if (col > sheet.getMaxColumns()) continue;
+      const candidateValue = String(sheet.getRange(row, col).getDisplayValue() || '').trim();
+      if (!candidateValue) continue;
+      const candidateRecord = findMatchingEntryRecord_(candidateValue, lookup);
+      if (candidateRecord) {
+        selectedCell = sheet.getRange(row, col);
+        record = candidateRecord;
+        break;
+      }
     }
 
-    for (let row = startRow; row <= lastRow; row++) {
-      if (descriptionChanged) {
-        const description = String(sheet.getRange(row, 1).getDisplayValue() || '').trim();
-        if (!description) {
-          sheet.getRange(row, 2).clearContent();  // Classification
-          sheet.getRange(row, 3).clearContent();  // Category
-          sheet.getRange(row, 5).clearContent();  // UOM
-          sheet.getRange(row, 12).clearContent(); // Unit Cost
-          sheet.getRange(row, 13).clearContent(); // Estimated Budget
-        } else {
-          const record = findMatchingEntryRecord_(description, lookup);
+    // Also check the template's expected description cell A, including when
+    // the user edits Quantity or another field rather than the dropdown.
+    const descriptionCellA = sheet.getRange(row, 1);
+    const descriptionA = String(descriptionCellA.getDisplayValue() || '').trim();
+    if (!record && descriptionA) {
+      record = findMatchingEntryRecord_(descriptionA, lookup);
+      if (record) selectedCell = descriptionCellA;
+    }
 
-          if (!record) {
-            const available = Object.keys(lookup).slice(0, 5).join(' | ');
-            throw new Error(
-              'No matching source record was found for the selected General Description. ' +
-              'Selected value: "' + description + '". Source lookup records: ' +
-              Object.keys(lookup).length + '. Example dropdown values: ' + (available || '(none)') +
-              '. Check the Entries header row and source values.'
-            );
-          }
+    // If A contains a value but no source match, show an actionable error.
+    // Do not stop processing other rows in a pasted range.
+    if (selectedCell && record) {
+      const descriptionColumn = selectedCell.getColumn();
+      // Preserve the selected General Description and populate the known
+      // PPMP template fields. The description is normally A; if the dropdown
+      // is elsewhere, its selected cell is left intact and data still fills.
+      sheet.getRange(row, 2).setValue(record.classification || '');
+      sheet.getRange(row, 3).setValue(record.category || '');
+      sheet.getRange(row, 5).setValue(record.uom || '');
+      const cost = parseNumericValue_(record.unitCost);
+      if (cost === null) sheet.getRange(row, 12).clearContent();
+      else sheet.getRange(row, 12).setValue(cost);
 
-          sheet.getRange(row, 2).setValue(record.classification || '');
-          sheet.getRange(row, 3).setValue(record.category || '');
-          sheet.getRange(row, 5).setValue(record.uom || '');
-          const cost = parseNumericValue_(record.unitCost);
-          if (cost === null) sheet.getRange(row, 12).clearContent();
-          else sheet.getRange(row, 12).setValue(cost);
-        }
-      }
-
-      if (descriptionChanged || quantityOrCostChanged) {
-        const cost = parseNumericValue_(sheet.getRange(row, 12).getValue());
-        const qty = parseNumericValue_(sheet.getRange(row, 4).getValue());
-        if (cost === null || qty === null) {
+      const qty = parseNumericValue_(sheet.getRange(row, 4).getValue());
+      if (cost === null || qty === null) sheet.getRange(row, 13).clearContent();
+      else sheet.getRange(row, 13).setValue(cost * qty);
+    } else {
+      // If the edit happened in the expected description column, clear stale
+      // dependent values when it is emptied, or report a mismatch when not.
+      if (firstCol <= 1 && lastCol >= 1) {
+        if (!descriptionA) {
+          sheet.getRange(row, 2).clearContent();
+          sheet.getRange(row, 3).clearContent();
+          sheet.getRange(row, 5).clearContent();
+          sheet.getRange(row, 12).clearContent();
           sheet.getRange(row, 13).clearContent();
         } else {
-          sheet.getRange(row, 13).setValue(cost * qty);
+          throw new Error(
+            'The selected value in PPMP Form!A' + row + ' did not match Entries. ' +
+            'Value: "' + descriptionA + '". Dropdown options loaded: ' +
+            sourceData.options.length + '. Example: ' +
+            sourceData.options.slice(0, 3).join(' | ')
+          );
         }
+      } else {
+        // Quantity/unit cost changes must recalculate estimated budget even
+        // if no description cell was edited during this event.
+        const cost = parseNumericValue_(sheet.getRange(row, 12).getValue());
+        const qty = parseNumericValue_(sheet.getRange(row, 4).getValue());
+        if (cost === null || qty === null) sheet.getRange(row, 13).clearContent();
+        else sheet.getRange(row, 13).setValue(cost * qty);
       }
     }
   }
 
-  // Refresh summary after the form values and computed budget are committed.
   SpreadsheetApp.flush();
   updatePPMPSummary_(spreadsheet);
   SpreadsheetApp.flush();
 }
-
 /**
  * Installable on-change handler: when rows are inserted into the destination
  * spreadsheet, rebuild the PPMP Form borders across A:O. This complements
