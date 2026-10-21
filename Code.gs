@@ -157,6 +157,7 @@ function setupEntryDropdownAndAutofill() {
     const handler = trigger.getHandlerFunction();
     if (
       handler === 'handleEntrySelection' ||
+      handler === 'handlePPMPFormEdit' ||
       handler === 'handleEntriesSourceEdit' ||
       handler === 'handlePPMPRowChange'
     ) {
@@ -164,7 +165,9 @@ function setupEntryDropdownAndAutofill() {
     }
   });
 
-  ScriptApp.newTrigger('handleEntrySelection')
+  // One dedicated edit trigger runs PPMP autofill/calculations first, then
+  // always rebuilds PPMP Summary for every edit made on the PPMP Form sheet.
+  ScriptApp.newTrigger('handlePPMPFormEdit')
     .forSpreadsheet(spreadsheet)
     .onEdit()
     .create();
@@ -1338,6 +1341,37 @@ function handleEntrySelection(e) {
   }
 }
 
+
+/**
+ * Installable edit handler for the PPMP Form sheet.
+ * Always refreshes the summary after normal autofill/calculation handling,
+ * including edits to category, quantity, cost, fiscal year, end-user, clearing
+ * cells, and multi-cell pastes. No page reload is required.
+ */
+function handlePPMPFormEdit(e) {
+  if (!e || !e.range || !e.source) return;
+
+  const sheet = e.range.getSheet();
+  if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) return;
+
+  const spreadsheet = e.source;
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    // Existing handler fills linked fields and recalculates estimated budget.
+    // Its summary calls are retained; the final rebuild below guarantees the
+    // summary reflects the completed form values for every edit event.
+    try {
+      handleEntrySelection(e);
+    } finally {
+      SpreadsheetApp.flush();
+      updatePPMPSummary_(spreadsheet);
+      SpreadsheetApp.flush();
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 /**
  * Installable on-change handler: when rows are inserted into the destination
