@@ -384,10 +384,10 @@ function applyEndUserDropdownB9_(destinationSpreadsheet, sourceSpreadsheet) {
     .setHelpText('Select an End-User or Implementing Unit from the Data List spreadsheet, End-User sheet.')
     .build();
 
-  // The PPMP Form template's End-user or Implementing Unit field is B9.
-  // Apply the validation directly to B9 so it cannot be attached to a
-  // different cell by label detection or template wording changes.
-  const target = destinationSheet.getRange('B9');
+  // The End-user or Implementing Unit input is a merged range B9:D9.
+  // Google Sheets stores data validation on the top-left cell of a merged
+  // range, so apply the rule to B9 (the anchor cell) and the full merged range.
+  const target = destinationSheet.getRange('B9:D9');
   target.setDataValidation(rule);
 }
 
