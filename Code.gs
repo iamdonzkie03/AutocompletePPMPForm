@@ -172,10 +172,6 @@ function setupEntryDropdownAndAutofill() {
     .onEdit()
     .create();
 
-  // Place the functional Add Entry Row control immediately below the
-  // last populated line item in the PPMP Form table.
-  createAddEntryRowControl_(ppmpFormSheet);
-
   // Populate PPMP Summary immediately.
   updatePPMPSummary_(spreadsheet);
 
@@ -439,51 +435,6 @@ function applyPPMPEntryTableBorders_(sheet, lastRow) {
     );
   }
   SpreadsheetApp.flush();
-}
-
-/**
- * Run this directly to place/restore the visible Add Entry Row control,
- * even if the full setup function encounters an unrelated error.
- */
-function showAddEntryRowControl() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  if (!spreadsheet) throw new Error('Open the destination spreadsheet first.');
-  const sheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
-  if (!sheet) throw new Error('The PPMP Form sheet was not found.');
-  createAddEntryRowControl_(sheet);
-  SpreadsheetApp.flush();
-  spreadsheet.toast('Add Entry Row control placed below the last populated entry.', 'PPMP Form', 5);
-}
-
-/**
- * Adds a checkbox-based Add Entry Row control below the last populated
- * PPMP line item. Checking it invokes addPPMPEntryRow via the existing
- * installable edit trigger; this avoids a custom menu command.
- */
-function createAddEntryRowControl_(sheet) {
-  if (!sheet) return;
-  const firstEntryRow = 15;
-  const initialLastRow = 34;
-  const lastDescriptionRow = findLastDescriptionEntryRow_(sheet, 1, firstEntryRow);
-  // Keep the control below the 20 preallocated table rows; never overwrite row 15–34.
-  const controlRow = Math.max(initialLastRow + 1, lastDescriptionRow + 1);
-
-  // Keep the Add Entry Row label below the last populated item, without a checkbox.
-  if (controlRow > sheet.getMaxRows()) {
-    sheet.insertRowsAfter(sheet.getMaxRows(), controlRow - sheet.getMaxRows());
-  }
-
-  const controlCell = sheet.getRange(controlRow, 1);
-  const labelCell = sheet.getRange(controlRow, 2);
-  controlCell.clearContent().clearDataValidations().clearNote();
-  controlCell.setBackground(null);
-  labelCell.setValue('＋ ADD ENTRY ROW');
-  labelCell.setFontWeight('bold');
-  labelCell.setHorizontalAlignment('left');
-  labelCell.setVerticalAlignment('middle');
-  labelCell.setBackground('#d9ead3');
-  labelCell.clearNote();
-  sheet.setRowHeight(controlRow, Math.max(28, sheet.getRowHeight(controlRow)));
 }
 
 /***************************************************************
@@ -1330,7 +1281,6 @@ function handleEntrySelection(e) {
   if (isPPMPForm) {
     SpreadsheetApp.flush();
     updatePPMPSummary_(spreadsheet);
-    createAddEntryRowControl_(sheet);
   }
 }
 
