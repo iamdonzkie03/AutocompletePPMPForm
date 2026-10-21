@@ -351,26 +351,21 @@ function createAddEntryRowControl_(sheet) {
   const lastDescriptionRow = findLastDescriptionEntryRow_(sheet, 1, firstEntryRow);
   const controlRow = Math.max(firstEntryRow, lastDescriptionRow + 1);
 
-  // Ensure a blank row exists below the last item.
+  // Keep the Add Entry Row label below the last populated item, without a checkbox.
   if (controlRow > sheet.getMaxRows()) {
     sheet.insertRowsAfter(sheet.getMaxRows(), controlRow - sheet.getMaxRows());
   }
 
   const controlCell = sheet.getRange(controlRow, 1);
   const labelCell = sheet.getRange(controlRow, 2);
-  controlCell.clearContent().clearDataValidations();
-  controlCell.insertCheckboxes();
-  controlCell.setValue(false);
-  controlCell.setHorizontalAlignment('center');
-  controlCell.setVerticalAlignment('middle');
-  controlCell.setBackground('#d9ead3');
-  controlCell.setNote('Check this box to add a new PPMP entry row.');
+  controlCell.clearContent().clearDataValidations().clearNote();
+  controlCell.setBackground(null);
   labelCell.setValue('＋ ADD ENTRY ROW');
   labelCell.setFontWeight('bold');
   labelCell.setHorizontalAlignment('left');
   labelCell.setVerticalAlignment('middle');
   labelCell.setBackground('#d9ead3');
-  labelCell.setNote('Check the box in column A to add a new entry row.');
+  labelCell.clearNote();
   sheet.setRowHeight(controlRow, Math.max(28, sheet.getRowHeight(controlRow)));
 }
 
@@ -1045,23 +1040,6 @@ function handleEntrySelection(e) {
   const isPPMPForm =
     sheet.getName() ===
     ENTRY_CONFIG.PPMP_FORM_SHEET;
-
-  // The checkbox below the table acts as the visible Add Entry Row control.
-  // addPPMPEntryRow clears that control row and converts it into a new item row.
-  if (
-    isPPMPForm &&
-    range.getNumRows() === 1 &&
-    range.getNumColumns() === 1 &&
-    range.getColumn() === 1 &&
-    range.getValue() === true &&
-    range.getRow() >= 15
-  ) {
-    // Clear the checked control first so it is not mistaken for a project
-    // description when addPPMPEntryRow locates the next blank line-item row.
-    range.clearContent();
-    addPPMPEntryRow();
-    return;
-  }
 
   const info = findDestinationHeaders_(sheet);
 
