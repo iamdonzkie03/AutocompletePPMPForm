@@ -864,13 +864,16 @@ function loadSourceLookup_(sourceSheet) {
     options.push(option);
 
     lookup[key] = {
+      // Retain source identity fields so selections can still be matched
+      // when Sheets returns only the item name instead of the full dropdown label.
+      description: description,
+      specifications: specifications,
       classification:
         getArrayValue_(row, info.headerMap.classification),
 
       category:
         getArrayValue_(row, info.headerMap.category),
 
-      // The source UOM value is retained for destination autofill.
       uom:
         getArrayValue_(row, info.headerMap.uom),
 
@@ -1471,18 +1474,44 @@ function processPPMPFormEditDirect_(e, spreadsheet) {
         } else {
           let record = lookup[normalizeValue_(description)];
 
-          // Support dropdown labels with different spacing around the comma,
-          // while only accepting a unique item-name match as a fallback.
+          // Sheets can return either the full "name, specifications" dropdown
+          // label or only the item name. Match against the source description
+          // field itself (not split(',') which breaks item names containing commas).
           if (!record) {
-            const baseName = normalizeValue_(description.split(',')[0]);
+            const selected = normalizeValue_(description);
             const matches = Object.keys(lookup).filter(function(key) {
-              return normalizeValue_(key.split(',')[0]) === baseName;
+              const candidate = lookup[key];
+              const sourceName = normalizeValue_(candidate.description);
+              const fullLabel = normalizeValue_(
+                candidate.specifications
+                  ? candidate.description + ', ' + candidate.specifications
+                  : candidate.description
+              );
+              return selected === sourceName || selected === fullLabel;
+            });
+            if (matches.length === 1) record = lookup[matches[0]];
+          }
+
+          // Last-resort match: selected label starts with the exact source item
+          // name followed by a comma, but only if the source name is unique.
+          if (!record) {
+            const selected = normalizeValue_(description);
+            const matches = Object.keys(lookup).filter(function(key) {
+              const sourceName = normalizeValue_(lookup[key].description);
+              return sourceName && (
+                selected === sourceName ||
+                selected.indexOf(sourceName + ',') === 0
+              );
             });
             if (matches.length === 1) record = lookup[matches[0]];
           }
 
           if (!record) {
-            throw new Error('No matching record found in Entries for selected General Description: ' + description);
+            throw new Error(
+              'Selected General Description did not match a unique record in Entries. ' +
+              'Selected value: "' + description + '". Check that the dropdown value matches ' +
+              'the source General Description/Generic Name and Technical Specifications.'
+            );
           }
 
           sheet.getRange(row, 2).setValue(record.classification || '');
