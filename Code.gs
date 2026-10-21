@@ -968,16 +968,17 @@ function updatePPMPSummary_(spreadsheet) {
 
   if (!summaryInfo) {
     throw new Error(
-      'PPMP Summary must contain Category and an amount header ' +
-      'on the same row within its first 10 rows.'
+      'PPMP Summary must contain a Category header and a Total Amount ' +
+      'header (or Total ABC/Amount) within its first 10 rows.'
     );
   }
 
   const totals = new Map();
   // PPMP Form entries begin at row 5; do not summarize header rows.
-  const firstDataRow = ENTRY_CONFIG.PPMP_FORM_SHEET === formSheet.getName()
-    ? 5
-    : formInfo.headerRow + 1;
+  // Only PPMP Form line items from row 5 onward are eligible.
+  // This deliberately excludes the first four rows, including any
+  // header/summary content above the actual entries.
+  const firstDataRow = 5;
   const lastDataRow = formSheet.getLastRow();
   const lastColumn = formSheet.getLastColumn();
 
@@ -1115,13 +1116,28 @@ function findCategoryAmountHeaders_(sheet) {
 
   // Prefer the actual line-item amount column on PPMP Form.
   // Summary sheets can use Total Amount or similar headings.
-  const preferredAmountHeaders = [
-    normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget),
-    normalizeHeader_('Estimated Budget'),
-    normalizeHeader_('Total Amount'),
-    normalizeHeader_('Total ABC'),
-    normalizeHeader_('Amount')
-  ];
+  // Use the PPMP Form's line-item estimated budget as the source
+  // amount. In PPMP Summary, write totals specifically to Total Amount
+  // when that header exists, rather than accidentally choosing an
+  // unrelated Estimated Budget column.
+  const isSummarySheet =
+    sheet.getName() === ENTRY_CONFIG.PPMP_SUMMARY_SHEET;
+
+  const preferredAmountHeaders = isSummarySheet
+    ? [
+        normalizeHeader_('Total Amount'),
+        normalizeHeader_('Total ABC'),
+        normalizeHeader_('Amount'),
+        normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget),
+        normalizeHeader_('Estimated Budget')
+      ]
+    : [
+        normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget),
+        normalizeHeader_('Estimated Budget'),
+        normalizeHeader_('Total Amount'),
+        normalizeHeader_('Total ABC'),
+        normalizeHeader_('Amount')
+      ];
 
   let categoryColumn = null;
   let categoryHeaderRow = null;
