@@ -1184,9 +1184,9 @@ function handleEntrySelection(e) {
       )
     ];
 
-  // PPMP Form's entry rows begin at row 5, even when the sheet has
-  // multi-row headings or a large formatted template.
-  const dataStartRow = isPPMPForm ? 5 : info.dataStartRow;
+  // The PPMP Form line-item table starts at row 15. Ignore edits to
+  // title/metadata rows so they cannot be mistaken for line-item edits.
+  const dataStartRow = isPPMPForm ? 15 : info.dataStartRow;
 
   const unitCostColumn =
     headerMap[
@@ -1255,13 +1255,18 @@ function handleEntrySelection(e) {
       loadSourceLookup_(sourceSheet).lookup;
   }
 
-  const firstRow = Math.max(
-    range.getRow(),
-    dataStartRow
-  );
+  const firstRow = Math.max(range.getRow(), dataStartRow);
+  const lastRow = range.getRow() + range.getNumRows() - 1;
 
-  const lastRow =
-    range.getRow() + range.getNumRows() - 1;
+  // A paste/edit wholly above the line-item table must never autofill or
+  // calculate against metadata cells. Summary metadata is still refreshed.
+  if (firstRow > lastRow) {
+    if (isPPMPForm) {
+      SpreadsheetApp.flush();
+      updatePPMPSummary_(spreadsheet);
+    }
+    return;
+  }
 
   for (let row = firstRow; row <= lastRow; row++) {
     if (descriptionEdited) {
@@ -1277,8 +1282,19 @@ function handleEntrySelection(e) {
         continue;
       }
 
-      const record =
-        sourceLookup[normalizeValue_(description)];
+      let record = sourceLookup[normalizeValue_(description)];
+
+      // Older dropdown values may contain a slightly different spacing or
+      // punctuation version. If the exact combined label is not found, only
+      // use a unique match on the item name before the specifications.
+      if (!record && description) {
+        const baseName = description.split(',')[0].trim();
+        const matches = Object.keys(sourceLookup).filter(function(key) {
+          return key.split(',')[0].trim() === normalizeValue_(baseName) ||
+            normalizeValue_(key.split(',')[0].trim()) === normalizeValue_(baseName);
+        });
+        if (matches.length === 1) record = sourceLookup[matches[0]];
+      }
 
       if (record) {
         setIfPresent_(
@@ -1362,11 +1378,20 @@ function handlePPMPFormEdit(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    // Preserve the original autofill/calculation workflow first.
-    handleEntrySelection(e);
+    // Run autofill and Estimated Budget calculation before rebuilding summary.
+    // Surface failures in the spreadsheet so they are not silently mistaken
+    // for a successful dropdown edit.
+    try {
+      handleEntrySelection(e);
+    } catch (autofillError) {
+      console.error('PPMP Form autofill failed: ' + autofillError.message);
+      spreadsheet.toast(
+        'Autofill failed: ' + autofillError.message,
+        'PPMP Form',
+        10
+      );
+    }
 
-    // Then rebuild PPMP Summary from the completed form values. A failure in
-    // summary rendering must not be allowed to undo the completed form edit.
     SpreadsheetApp.flush();
     try {
       updatePPMPSummary_(spreadsheet);
@@ -1374,9 +1399,9 @@ function handlePPMPFormEdit(e) {
     } catch (summaryError) {
       console.error('PPMP Summary refresh failed: ' + summaryError.message);
       spreadsheet.toast(
-        'PPMP Form was updated, but PPMP Summary refresh failed: ' + summaryError.message,
+        'PPMP Summary refresh failed: ' + summaryError.message,
         'PPMP Summary',
-        8
+        10
       );
     }
   } finally {
@@ -1984,12 +2009,11 @@ function findDestinationHeaders_(sheet) {
     return null;
   }
 
-  // PPMP Form data-entry rows begin at row 5. Keep validation and
-  // edit handling aligned to that fixed first entry row, regardless
-  // of whether the sheet uses one-row or multi-row headers.
+  // The PPMP Form has title/metadata above the line-item table.
+  // All description dropdowns and line-item edits must start at row 15.
   const dataStartRow =
     sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
-      ? 5
+      ? 15
       : Math.max(headerRow, lastHeaderRow) + 1;
 
   return {
