@@ -242,9 +242,12 @@ function addPPMPEntryRow() {
     sheet.setRowHeight(newRow, sheet.getRowHeight(templateRow));
   }
 
-  // Extend the PPMP table grid to the newly added entry row. Copying the
-  // row format preserves the template styling; explicitly reapply the table
-  // borders so the grid continues when entries extend past the original range.
+  // New entry should be blank, without carrying forward the previous item's data.
+  sheet.getRange(newRow, 1, 1, sheet.getMaxColumns()).clearContent();
+
+  // Extend the visible table grid after formatting and clearing the new row.
+  // Header-map indexes are zero-based, so convert the final table column to
+  // a Sheets column count by adding one.
   const tableLastColumn = Math.max(
     descriptionColumn,
     modeColumn,
@@ -255,14 +258,22 @@ function addPPMPEntryRow() {
     info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.unitCost)] ?? 0,
     info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget)] ?? 0
   ) + 1;
+
+  // Match the borders of the previous item row first, then force a complete
+  // solid grid on the new row so the outer and inner lines remain visible.
+  if (newRow > firstEntryRow) {
+    sheet.getRange(newRow - 1, 1, 1, tableLastColumn)
+      .copyTo(
+        sheet.getRange(newRow, 1, 1, tableLastColumn),
+        SpreadsheetApp.CopyPasteType.PASTE_FORMAT,
+        false
+      );
+  }
   sheet.getRange(newRow, 1, 1, tableLastColumn).setBorder(
     true, true, true, true, true, true,
     '#000000',
     SpreadsheetApp.BorderStyle.SOLID
   );
-
-  // New entry should be blank, without carrying forward the previous item's data.
-  sheet.getRange(newRow, 1, 1, sheet.getMaxColumns()).clearContent();
 
   const sourceSpreadsheet = SpreadsheetApp.openById(
     ENTRY_CONFIG.SOURCE_SPREADSHEET_ID
