@@ -1355,18 +1355,29 @@ function handlePPMPFormEdit(e) {
   if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) return;
 
   const spreadsheet = e.source;
-  const lock = LockService.getDocumentLock();
+
+  // ScriptLock works for both container-bound and standalone Apps Script
+  // projects. DocumentLock can be null in a standalone project, which would
+  // stop the edit handler before autofill ever runs.
+  const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    // Existing handler fills linked fields and recalculates estimated budget.
-    // Its summary calls are retained; the final rebuild below guarantees the
-    // summary reflects the completed form values for every edit event.
+    // Preserve the original autofill/calculation workflow first.
+    handleEntrySelection(e);
+
+    // Then rebuild PPMP Summary from the completed form values. A failure in
+    // summary rendering must not be allowed to undo the completed form edit.
+    SpreadsheetApp.flush();
     try {
-      handleEntrySelection(e);
-    } finally {
-      SpreadsheetApp.flush();
       updatePPMPSummary_(spreadsheet);
       SpreadsheetApp.flush();
+    } catch (summaryError) {
+      console.error('PPMP Summary refresh failed: ' + summaryError.message);
+      spreadsheet.toast(
+        'PPMP Form was updated, but PPMP Summary refresh failed: ' + summaryError.message,
+        'PPMP Summary',
+        8
+      );
     }
   } finally {
     lock.releaseLock();
