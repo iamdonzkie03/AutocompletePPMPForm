@@ -1378,15 +1378,14 @@ function handlePPMPFormEdit(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    // Run autofill and Estimated Budget calculation before rebuilding summary.
-    // Surface failures in the spreadsheet so they are not silently mistaken
-    // for a successful dropdown edit.
+    // Use the template's fixed A:O layout directly. This avoids header
+    // detection being affected by merged/multi-row headings in the PPMP Form.
     try {
-      handleEntrySelection(e);
+      processPPMPFormEditDirect_(e, spreadsheet);
     } catch (autofillError) {
-      console.error('PPMP Form autofill failed: ' + autofillError.message);
+      console.error('PPMP Form edit processing failed: ' + (autofillError.stack || autofillError.message));
       spreadsheet.toast(
-        'Autofill failed: ' + autofillError.message,
+        'PPMP Form automation failed: ' + autofillError.message,
         'PPMP Form',
         10
       );
@@ -1407,6 +1406,98 @@ function handlePPMPFormEdit(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * Deterministic PPMP Form edit processor for the known template layout:
+ * A Description, B Classification, C Category, D Quantity, E UOM,
+ * L Unit Cost, M Estimated Budget. Line items begin at row 15.
+ *
+ * This deliberately avoids dynamic header detection because the template uses
+ * merged and multi-row headers that can be ambiguous.
+ */
+function processPPMPFormEditDirect_(e, spreadsheet) {
+  const range = e.range;
+  const sheet = range.getSheet();
+  if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) return;
+
+  const firstRow = range.getRow();
+  const lastRow = firstRow + range.getNumRows() - 1;
+  const firstCol = range.getColumn();
+  const lastCol = firstCol + range.getNumColumns() - 1;
+  const touches = function(col) {
+    return firstCol <= col && lastCol >= col;
+  };
+
+  // Only process line-item rows for item/quantity/cost edits.
+  if (lastRow >= 15) {
+    const startRow = Math.max(15, firstRow);
+    const descriptionChanged = touches(1);
+    const quantityOrCostChanged = touches(4) || touches(12);
+
+    let lookup = null;
+    if (descriptionChanged) {
+      const sourceSpreadsheet = SpreadsheetApp.openById(
+        ENTRY_CONFIG.SOURCE_SPREADSHEET_ID
+      );
+      const sourceSheet = sourceSpreadsheet.getSheetByName(
+        ENTRY_CONFIG.SOURCE_SHEET_NAME
+      );
+      if (!sourceSheet) throw new Error('The source Entries worksheet was not found.');
+      lookup = loadSourceLookup_(sourceSheet).lookup;
+    }
+
+    for (let row = startRow; row <= lastRow; row++) {
+      if (descriptionChanged) {
+        const description = String(sheet.getRange(row, 1).getDisplayValue() || '').trim();
+        if (!description) {
+          sheet.getRange(row, 2).clearContent();  // Classification
+          sheet.getRange(row, 3).clearContent();  // Category
+          sheet.getRange(row, 5).clearContent();  // UOM
+          sheet.getRange(row, 12).clearContent(); // Unit Cost
+          sheet.getRange(row, 13).clearContent(); // Estimated Budget
+        } else {
+          let record = lookup[normalizeValue_(description)];
+
+          // Support dropdown labels with different spacing around the comma,
+          // while only accepting a unique item-name match as a fallback.
+          if (!record) {
+            const baseName = normalizeValue_(description.split(',')[0]);
+            const matches = Object.keys(lookup).filter(function(key) {
+              return normalizeValue_(key.split(',')[0]) === baseName;
+            });
+            if (matches.length === 1) record = lookup[matches[0]];
+          }
+
+          if (!record) {
+            throw new Error('No matching record found in Entries for selected General Description: ' + description);
+          }
+
+          sheet.getRange(row, 2).setValue(record.classification || '');
+          sheet.getRange(row, 3).setValue(record.category || '');
+          sheet.getRange(row, 5).setValue(record.uom || '');
+          const cost = parseNumericValue_(record.unitCost);
+          if (cost === null) sheet.getRange(row, 12).clearContent();
+          else sheet.getRange(row, 12).setValue(cost);
+        }
+      }
+
+      if (descriptionChanged || quantityOrCostChanged) {
+        const cost = parseNumericValue_(sheet.getRange(row, 12).getValue());
+        const qty = parseNumericValue_(sheet.getRange(row, 4).getValue());
+        if (cost === null || qty === null) {
+          sheet.getRange(row, 13).clearContent();
+        } else {
+          sheet.getRange(row, 13).setValue(cost * qty);
+        }
+      }
+    }
+  }
+
+  // Refresh summary after the form values and computed budget are committed.
+  SpreadsheetApp.flush();
+  updatePPMPSummary_(spreadsheet);
+  SpreadsheetApp.flush();
 }
 
 /**
