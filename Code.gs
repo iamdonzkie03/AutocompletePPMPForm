@@ -899,95 +899,130 @@ function loadSourceLookup_(sourceSheet) {
 function findSourceHeaders_(values) {
   const aliases = {
     description: [
-      'General Description/Generic Name',
-      'General Description',
-      'Description',
-      'Item Description'
+      'General Description/Generic Name', 'General Description',
+      'General Description Generic Name', 'Generic Name', 'Item Name',
+      'Description', 'Item Description', 'Project Description'
     ],
-
     specifications: [
-      'Technical Specifications',
-      'Specifications',
-      'Technical Specification'
+      'Technical Specifications', 'Technical Specification',
+      'Specifications', 'Specification', 'Technical Description'
     ],
-
-    // Prefer specific UOM headers. Do not match the generic
-    // header "Unit", which can accidentally select an unrelated column.
     uom: [
-      'Unit or Measurement/Size',
-      'Unit or Measurement Size',
-      'Unit/Measurement/Size',
-      'Unit/Measure/Size',
-      'Unit of Measurement',
-      'Unit of Measure',
-      'Measurement/Size',
-      'UOM'
+      'Unit or Measurement/Size', 'Unit or Measurement Size',
+      'Unit/Measurement/Size', 'Unit/Measure/Size',
+      'Unit of Measurement', 'Unit of Measure', 'Measurement/Size',
+      'Measurement', 'UOM', 'Unit'
     ],
-
     unitCost: [
-      'Unit Cost',
-      'Cost per Unit',
-      'Price per Unit'
+      'Unit Cost', 'Cost per Unit', 'Price per Unit',
+      'Unit Price', 'Estimated Unit Cost', 'Cost'
     ],
-
     classification: [
-      'Classification',
-      'Type of Project',
-      'Type of the Project to be Procured'
+      'Classification', 'Type of Project',
+      'Type of the Project to be Procured', 'Project Type',
+      'Type', 'Item Classification'
     ],
-
-    category: [
-      'Category',
-      'Item Category'
-    ]
+    category: ['Category', 'Item Category', 'Item Classification Category']
   };
 
-  const searchRows = Math.min(
-    values.length,
-    ENTRY_CONFIG.HEADER_SEARCH_ROWS
-  );
+  const requiredKeys = ['description', 'uom', 'unitCost', 'classification', 'category'];
+  const searchRows = Math.min(values.length, ENTRY_CONFIG.HEADER_SEARCH_ROWS);
+  let best = null;
 
+  // Score every candidate header row. A stray title or partial header row
+  // must not win over a row containing all the required fields.
   for (let r = 0; r < searchRows; r++) {
     const headerMap = {};
-
-    for (let c = 0; c < values[r].length; c++) {
-      const currentHeader =
-        normalizeHeader_(values[r][c]);
-
-      if (!currentHeader) continue;
+    for (let col = 0; col < values[r].length; col++) {
+      const current = normalizeHeader_(values[r][col]);
+      if (!current) continue;
 
       Object.keys(aliases).forEach(function(key) {
-        const normalizedAliases = aliases[key].map(normalizeHeader_);
-        const matches = normalizedAliases.indexOf(currentHeader) !== -1;
-
-        if (matches && headerMap[key] === undefined) {
-          headerMap[key] = c;
-        }
+        if (headerMap[key] !== undefined) return;
+        const aliasKeys = aliases[key].map(normalizeHeader_);
+        if (aliasKeys.indexOf(current) !== -1) headerMap[key] = col;
       });
     }
 
-    // Description, UOM, Unit Cost, Classification and Category
-    // are required. Specifications is optional.
-    const requiredKeys = [
-      'description',
-      'uom',
-      'unitCost',
-      'classification',
-      'category'
-    ];
-
-    const allFound = requiredKeys.every(function(key) {
+    const foundCount = requiredKeys.filter(function(key) {
       return headerMap[key] !== undefined;
-    });
+    }).length;
 
-    if (allFound) {
-      return {
-        headerRow: r,
-        headerMap: headerMap
-      };
+    if (!best || foundCount > best.foundCount) {
+      best = { headerRow: r, headerMap: headerMap, foundCount: foundCount };
+    }
+    if (foundCount === requiredKeys.length) {
+      return { headerRow: r, headerMap: headerMap };
     }
   }
 
+  // Some versions of the source sheet have a split/merged heading area.
+  // Collect each field's column from the strongest rows as a fallback.
+  if (best && best.foundCount >= 3) {
+    const combined = Object.assign({}, best.headerMap);
+    for (let r = 0; r < searchRows; r++) {
+      for (let col = 0; col < values[r].length; col++) {
+        const current = normalizeHeader_(values[r][col]);
+        if (!current) continue;
+        Object.keys(aliases).forEach(function(key) {
+          if (combined[key] !== undefined) return;
+          if (aliases[key].some(function(alias) {
+            return normalizeHeader_(alias) === current;
+          })) combined[key] = col;
+        });
+      }
+    }
+    if (requiredKeys.every(function(key) { return combined[key] !== undefined; })) {
+      return { headerRow: best.headerRow, headerMap: combined };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Match the selected dropdown label to the source Entries record.
+ * Uses exact full label first, then normalized label/name comparisons.
+ * Ambiguous base-name matches are rejected rather than filling the wrong item.
+ */
+function findMatchingEntryRecord_(selectedValue, lookup) {
+  const selected = normalizeValue_(selectedValue);
+  if (!selected) return null;
+  if (lookup[selected]) return lookup[selected];
+
+  const keys = Object.keys(lookup);
+  const exactMatches = [];
+  const nameMatches = [];
+  const prefixMatches = [];
+
+  keys.forEach(function(key) {
+    const record = lookup[key];
+    const name = normalizeValue_(record.description);
+    const specs = normalizeValue_(record.specifications);
+    const full = normalizeValue_(record.specifications
+      ? record.description + ', ' + record.specifications
+      : record.description);
+
+    if (selected === full || selected === name ||
+        normalizeHeader_(selected) === normalizeHeader_(full) ||
+        normalizeHeader_(selected) === normalizeHeader_(name)) {
+      exactMatches.push(record);
+      return;
+    }
+
+    if (name && (selected.indexOf(name + ',') === 0 ||
+                 selected.indexOf(name + ' ') === 0)) {
+      prefixMatches.push(record);
+    } else if (specs && selected === normalizeValue_(record.description + ' ' + record.specifications)) {
+      exactMatches.push(record);
+    } else if (name && (name.indexOf(selected) === 0 || selected.indexOf(name) === 0)) {
+      nameMatches.push(record);
+    }
+  });
+
+  if (exactMatches.length === 1) return exactMatches[0];
+  if (prefixMatches.length === 1) return prefixMatches[0];
+  if (nameMatches.length === 1) return nameMatches[0];
   return null;
 }
 
@@ -1472,45 +1507,15 @@ function processPPMPFormEditDirect_(e, spreadsheet) {
           sheet.getRange(row, 12).clearContent(); // Unit Cost
           sheet.getRange(row, 13).clearContent(); // Estimated Budget
         } else {
-          let record = lookup[normalizeValue_(description)];
-
-          // Sheets can return either the full "name, specifications" dropdown
-          // label or only the item name. Match against the source description
-          // field itself (not split(',') which breaks item names containing commas).
-          if (!record) {
-            const selected = normalizeValue_(description);
-            const matches = Object.keys(lookup).filter(function(key) {
-              const candidate = lookup[key];
-              const sourceName = normalizeValue_(candidate.description);
-              const fullLabel = normalizeValue_(
-                candidate.specifications
-                  ? candidate.description + ', ' + candidate.specifications
-                  : candidate.description
-              );
-              return selected === sourceName || selected === fullLabel;
-            });
-            if (matches.length === 1) record = lookup[matches[0]];
-          }
-
-          // Last-resort match: selected label starts with the exact source item
-          // name followed by a comma, but only if the source name is unique.
-          if (!record) {
-            const selected = normalizeValue_(description);
-            const matches = Object.keys(lookup).filter(function(key) {
-              const sourceName = normalizeValue_(lookup[key].description);
-              return sourceName && (
-                selected === sourceName ||
-                selected.indexOf(sourceName + ',') === 0
-              );
-            });
-            if (matches.length === 1) record = lookup[matches[0]];
-          }
+          const record = findMatchingEntryRecord_(description, lookup);
 
           if (!record) {
+            const available = Object.keys(lookup).slice(0, 5).join(' | ');
             throw new Error(
-              'Selected General Description did not match a unique record in Entries. ' +
-              'Selected value: "' + description + '". Check that the dropdown value matches ' +
-              'the source General Description/Generic Name and Technical Specifications.'
+              'No matching source record was found for the selected General Description. ' +
+              'Selected value: "' + description + '". Source lookup records: ' +
+              Object.keys(lookup).length + '. Example dropdown values: ' + (available || '(none)') +
+              '. Check the Entries header row and source values.'
             );
           }
 
