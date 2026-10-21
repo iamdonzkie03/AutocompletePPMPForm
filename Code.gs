@@ -1218,14 +1218,16 @@ function updatePPMPSummary_(spreadsheet) {
  * positioned differently on the two sheets.
  */
 function syncPPMPSummaryMetadata_(formSheet, summarySheet) {
-  // These fields use fixed cells in the PPMP template. The End-User
-  // dropdown is explicitly located in PPMP Form!B9; Fiscal Year is B8.
-  // Copy the displayed values to the same cells in PPMP Summary so this
-  // works even when the template labels are merged or formatted differently.
-  ['B8', 'B9'].forEach(function(address) {
-    const sourceCell = formSheet.getRange(address);
-    const destinationCell = summarySheet.getRange(address);
-    destinationCell.setValue(sourceCell.getValue());
+  // Source fields in PPMP Form: Fiscal Year = B8, End-User = B9.
+  // Destination fields in PPMP Summary: Fiscal Year = B7, End-User = B8.
+  // Map each source cell to its required destination cell explicitly.
+  [
+    { source: 'B8', destination: 'B7' },
+    { source: 'B9', destination: 'B8' }
+  ].forEach(function(field) {
+    summarySheet.getRange(field.destination).setValue(
+      formSheet.getRange(field.source).getValue()
+    );
   });
 }
 
