@@ -334,7 +334,9 @@ function addPPMPEntryRow() {
   // FINAL BORDER PASS: run after formatting, content clearing, and dropdown setup.
   // Apply the complete table grid across A:O in one operation. This works with
   // merged cells and avoids errors caused by applying borders to part of a merge.
-  applyPPMPEntryRowBorders_(sheet, newRow);
+  // Rebuild the grid over the full line-item table, not just the new row.
+  // This also restores the shared horizontal/vertical separators between rows.
+  applyPPMPEntryTableBorders_(sheet, newRow);
   SpreadsheetApp.flush();
 
   spreadsheet.setActiveSheet(sheet);
@@ -369,6 +371,38 @@ function applyPPMPEntryRowBorders_(sheet, row) {
   );
 }
 
+
+/**
+ * Reapply the complete PPMP Form table grid from row 15 through lastRow.
+ * Applying borders to a multi-row A:O range creates both internal vertical
+ * separators and horizontal row lines; then each row gets an explicit edge pass.
+ */
+function applyPPMPEntryTableBorders_(sheet, lastRow) {
+  if (!sheet) throw new Error('PPMP Form sheet is required to apply table borders.');
+  const firstRow = 15;
+  const finalRow = Math.max(firstRow, Number(lastRow) || firstRow);
+  if (finalRow > sheet.getMaxRows()) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), finalRow - sheet.getMaxRows());
+  }
+
+  const table = sheet.getRange(firstRow, 1, finalRow - firstRow + 1, 15); // A:O
+  table.setBorder(
+    true, true, true, true, true, true,
+    '#000000',
+    SpreadsheetApp.BorderStyle.SOLID
+  );
+
+  // Explicitly reinforce each row's top and bottom edges so no new row
+  // depends on the borders inherited from the preceding row.
+  for (let row = firstRow; row <= finalRow; row++) {
+    sheet.getRange(row, 1, 1, 15).setBorder(
+      true, true, true, true, true, true,
+      '#000000',
+      SpreadsheetApp.BorderStyle.SOLID
+    );
+  }
+  SpreadsheetApp.flush();
+}
 
 /**
  * Run this directly to place/restore the visible Add Entry Row control,
