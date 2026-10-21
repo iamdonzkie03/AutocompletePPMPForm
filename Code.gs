@@ -331,6 +331,26 @@ function addPPMPEntryRow() {
     .build();
   sheet.getRange(newRow, modeColumn + 1).setDataValidation(modeRule);
 
+  // FINAL BORDER PASS: the PPMP Form template uses the full A:O table
+  // width. Apply borders after all row setup and validation changes so the
+  // added row visibly continues the existing table grid.
+  const tableRange = sheet.getRange(newRow, 1, 1, 15);
+  tableRange.setBorder(
+    true, true, true, true, true, true,
+    '#000000',
+    SpreadsheetApp.BorderStyle.SOLID
+  );
+  // Reapply borders cell-by-cell as well, ensuring each table cell has its
+  // own visible outline (including internal vertical separators).
+  for (let col = 1; col <= 15; col++) {
+    sheet.getRange(newRow, col).setBorder(
+      true, true, true, true, true, true,
+      '#000000',
+      SpreadsheetApp.BorderStyle.SOLID
+    );
+  }
+  SpreadsheetApp.flush();
+
   spreadsheet.setActiveSheet(sheet);
   sheet.setActiveRange(sheet.getRange(newRow, descriptionColumn + 1));
   spreadsheet.toast(
