@@ -303,6 +303,21 @@ function addPPMPEntryRow() {
 
   spreadsheet.setActiveSheet(sheet);
   sheet.setActiveRange(sheet.getRange(newRow, descriptionColumn + 1));
+  // Rebuild the visible control after adding an entry. The new row is blank,
+  // so temporarily place the control one row below it; the next edit/setup
+  // will keep the control positioned after the last populated description.
+  const controlRow = newRow + 1;
+  if (controlRow > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1);
+  const controlCell = sheet.getRange(controlRow, 1);
+  const labelCell = sheet.getRange(controlRow, 2);
+  controlCell.clearContent().clearDataValidations().insertCheckboxes().setValue(false);
+  controlCell.setHorizontalAlignment('center').setVerticalAlignment('middle').setBackground('#d9ead3')
+    .setNote('Check this box to add a new PPMP entry row.');
+  labelCell.setValue('＋ ADD ENTRY ROW').setFontWeight('bold')
+    .setHorizontalAlignment('left').setVerticalAlignment('middle').setBackground('#d9ead3')
+    .setNote('Check the box in column A to add a new entry row.');
+  sheet.setRowHeight(controlRow, Math.max(28, sheet.getRowHeight(controlRow)));
+
   spreadsheet.toast(
     'Added entry row ' + newRow + ' with dropdowns and automatic autofill support.',
     'PPMP Form', 5
@@ -310,6 +325,20 @@ function addPPMPEntryRow() {
   return newRow;
 }
 
+
+/**
+ * Run this directly to place/restore the visible Add Entry Row control,
+ * even if the full setup function encounters an unrelated error.
+ */
+function showAddEntryRowControl() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (!spreadsheet) throw new Error('Open the destination spreadsheet first.');
+  const sheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  if (!sheet) throw new Error('The PPMP Form sheet was not found.');
+  createAddEntryRowControl_(sheet);
+  SpreadsheetApp.flush();
+  spreadsheet.toast('Add Entry Row control placed below the last populated entry.', 'PPMP Form', 5);
+}
 
 /**
  * Adds a checkbox-based Add Entry Row control below the last populated
