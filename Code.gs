@@ -211,10 +211,7 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
 
     // PPMP Form data validation must always begin at row 5.
     // Clear any older validation accidentally left in row 4.
-    const validationStartRow =
-      sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
-        ? 5
-        : info.dataStartRow;
+    const validationStartRow = info.dataStartRow;
 
     if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
       // Remove any legacy validation anywhere in row 4, not just the
@@ -227,12 +224,12 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
     // contains a project description. Remove old rules below that row.
     const validationEndRow =
       sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
-        ? findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, 5)
+        ? findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, info.dataStartRow)
         : sheet.getMaxRows();
 
     const availableRows = validationEndRow - validationStartRow + 1;
     if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET) {
-      const clearFromRow = Math.max(5, validationEndRow + 1);
+      const clearFromRow = Math.max(info.dataStartRow, validationEndRow + 1);
       if (clearFromRow <= sheet.getMaxRows()) {
         sheet.getRange(
           clearFromRow, descriptionColumn + 1,
@@ -681,10 +678,7 @@ function applyRecommendedModeDropdown_(destinationSpreadsheet) {
     if (column === undefined) return;
 
     // Keep PPMP Form dropdown validation out of row 4.
-    const validationStartRow =
-      sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET
-        ? 5
-        : info.dataStartRow;
+    const validationStartRow = info.dataStartRow;
 
     if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
       // Enforce the row-4 rule across the entire PPMP Form, including
@@ -699,14 +693,14 @@ function applyRecommendedModeDropdown_(destinationSpreadsheet) {
     const validationEndRow =
       sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET &&
       descriptionColumn !== undefined
-        ? findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, 5)
+        ? findLastDescriptionEntryRow_(sheet, descriptionColumn + 1, info.dataStartRow)
         : sheet.getMaxRows();
 
     const availableRows =
       validationEndRow - validationStartRow + 1;
 
     if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET) {
-      const clearFromRow = Math.max(5, validationEndRow + 1);
+      const clearFromRow = Math.max(info.dataStartRow, validationEndRow + 1);
       if (clearFromRow <= sheet.getMaxRows()) {
         sheet.getRange(
           clearFromRow, column + 1,
@@ -1125,7 +1119,7 @@ function updatePPMPSummary_(spreadsheet) {
   // Only PPMP Form line items from row 5 onward are eligible.
   // This deliberately excludes the first four rows, including any
   // header/summary content above the actual entries.
-  const firstDataRow = 5;
+  const firstDataRow = formSheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET ? 15 : 5;
   const lastDataRow = formSheet.getLastRow();
   const lastColumn = formSheet.getLastColumn();
 
@@ -1399,6 +1393,27 @@ function findCategoryAmountHeaders_(sheet) {
  ***************************************************************/
 
 function findDestinationHeaders_(sheet) {
+  // The ZCMC PPMP Form template has a fixed 15-column layout and its
+  // first data row is 15 (the field labels occupy rows above it).
+  // Use this explicit mapping so merged headings and repeated "Column 1"
+  // labels cannot confuse autofill column detection.
+  if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET) {
+    return {
+      headerRow: 13,
+      dataStartRow: 15,
+      headerMap: {
+        [normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.description)]: 0,       // A
+        [normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.classification)]: 1,   // B
+        [normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.category)]: 2,         // C
+        [normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.quantity)]: 3,         // D
+        [normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.uom)]: 4,              // E
+        [normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.recommendedMode)]: 5,  // F
+        [normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.unitCost)]: 11,        // L
+        [normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget)]: 12  // M
+      }
+    };
+  }
+
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
 
