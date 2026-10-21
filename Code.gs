@@ -119,12 +119,11 @@ function setupEntryDropdownAndAutofill() {
   const modeDropdownsApplied =
     applyRecommendedModeDropdown_(spreadsheet);
 
-  // Enforce the exact PPMP Form rule after all validation routines:
-  // cells A4 (Column 1) and F4 (Column 6) must never have validation.
+  // Enforce PPMP Form validation boundaries after all dropdown routines:
+  // Row 15 is the first entry row. Never leave validations above it.
   const ppmpFormSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
-  if (ppmpFormSheet && ppmpFormSheet.getMaxRows() >= 4) {
-    ppmpFormSheet.getRange('A4').clearDataValidations();
-    ppmpFormSheet.getRange('F4').clearDataValidations();
+  if (ppmpFormSheet && ppmpFormSheet.getMaxRows() >= 14) {
+    ppmpFormSheet.getRange(1, 1, 14, ppmpFormSheet.getMaxColumns()).clearDataValidations();
   }
 
   // Recreate both installable edit triggers:
@@ -209,15 +208,11 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
     ];
     if (descriptionColumn === undefined || sourceData.options.length === 0) return;
 
-    // PPMP Form data validation must always begin at row 5.
-    // Clear any older validation accidentally left in row 4.
+    // PPMP Form dropdown validation starts specifically at row 15.
     const validationStartRow = info.dataStartRow;
 
-    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
-      // Remove any legacy validation anywhere in row 4, not just the
-      // detected description column. Older versions may have applied
-      // validation to a different column or a wider range.
-      sheet.getRange(4, 1, 1, sheet.getMaxColumns()).clearDataValidations();
+    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 14) {
+      sheet.getRange(1, 1, 14, sheet.getMaxColumns()).clearDataValidations();
     }
 
     // On PPMP Form, validation must end at the last row that actually
@@ -677,13 +672,11 @@ function applyRecommendedModeDropdown_(destinationSpreadsheet) {
 
     if (column === undefined) return;
 
-    // Keep PPMP Form dropdown validation out of row 4.
+    // PPMP Form procurement-mode dropdown validation starts at row 15.
     const validationStartRow = info.dataStartRow;
 
-    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
-      // Enforce the row-4 rule across the entire PPMP Form, including
-      // any validations left behind by earlier script versions.
-      sheet.getRange(4, 1, 1, sheet.getMaxColumns()).clearDataValidations();
+    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 14) {
+      sheet.getRange(1, 1, 14, sheet.getMaxColumns()).clearDataValidations();
     }
 
     // Match mode validation to the last populated description row.
