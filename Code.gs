@@ -65,6 +65,20 @@ const ENTRY_CONFIG = {
 
 
 /***************************************************************
+ * PPMP FORM MENU
+ *
+ * Google Apps Script cannot create a sheet drawing/button directly.
+ * This menu provides an immediately usable Add Entry command.
+ ***************************************************************/
+function onOpen(e) {
+  SpreadsheetApp.getUi()
+    .createMenu('PPMP Form')
+    .addItem('Add Entry Row', 'addPPMPEntryRow')
+    .addToUi();
+}
+
+
+/***************************************************************
  * MAIN SETUP
  *
  * Run this function manually once after saving the code.
