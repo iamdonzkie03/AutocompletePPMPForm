@@ -1088,30 +1088,30 @@ function updatePPMPSummary_(spreadsheet) {
   const totals = new Map();
   // Only PPMP Form line items from row 15 onward are included.
   // Category comes from column C and Estimated Budget from column M.
+  // For PPMP Form, never read rows 1–14. The source data range is
+  // explicitly C15:M(last row), with Category in C and Estimated Budget in M.
   const firstDataRow = isPPMPForm ? 15 : 5;
   const lastDataRow = formSheet.getLastRow();
 
   if (lastDataRow >= firstDataRow) {
-    // Read only Category (C) through Estimated Budget (M) on the PPMP
-    // Form. This uses a stable 11-column range and ignores all records
-    // above row 15.
+    const sourceStartColumn = isPPMPForm ? 3 : formInfo.categoryColumn;
+    const sourceEndColumn = isPPMPForm ? 13 : formInfo.amountColumn;
     const data = formSheet.getRange(
       firstDataRow,
-      formInfo.categoryColumn,
+      sourceStartColumn,
       lastDataRow - firstDataRow + 1,
-      formInfo.amountColumn - formInfo.categoryColumn + 1
+      sourceEndColumn - sourceStartColumn + 1
     ).getValues();
 
     data.forEach(function(row) {
-      const category = String(
-        row[0] || ''
-      ).trim();
+      const categoryIndex = isPPMPForm ? 0 : formInfo.categoryColumn - sourceStartColumn;
+      const amountIndex = isPPMPForm ? 10 : formInfo.amountColumn - sourceStartColumn;
+      const category = String(row[categoryIndex] || '').trim();
 
+      // Ignore rows without a Category; they are not summary records.
       if (!category) return;
 
-      const amount = parseNumericValue_(
-        row[formInfo.amountColumn - formInfo.categoryColumn]
-      );
+      const amount = parseNumericValue_(row[amountIndex]);
 
       const key = normalizeValue_(category);
 
