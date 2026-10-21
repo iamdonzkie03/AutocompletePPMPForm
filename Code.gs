@@ -336,14 +336,12 @@ function applyEndUserDropdownB9_(destinationSpreadsheet, sourceSpreadsheet) {
     options.push(value);
   });
 
-  const cell = destinationSheet.getRange('B9');
-  cell.clearDataValidations();
   if (!options.length) {
-    throw new Error('No End-User items were found in column A from row 2 onward.');
+    throw new Error('No End-User items were found in column A from row 2 onward in the Data List End-User sheet.');
   }
 
-  // Data validation lists cannot directly reference a different spreadsheet,
-  // so copy the choices into helper column B in the destination spreadsheet.
+  // Keep the source choices in helper column B. Column A is used by the
+  // project-description dropdown, so the two lists do not overwrite each other.
   let helperSheet = destinationSpreadsheet.getSheetByName('_EntryDropdownOptions');
   if (!helperSheet) helperSheet = destinationSpreadsheet.insertSheet('_EntryDropdownOptions');
   helperSheet.getRange(1, 2, helperSheet.getMaxRows(), 1).clearContent();
@@ -355,9 +353,36 @@ function applyEndUserDropdownB9_(destinationSpreadsheet, sourceSpreadsheet) {
   const rule = SpreadsheetApp.newDataValidation()
     .requireValueInRange(helperSheet.getRange(1, 2, options.length, 1), true)
     .setAllowInvalid(false)
-    .setHelpText('Select an End-User from the Data List End-User worksheet.')
+    .setHelpText('Select an End-User or Implementing Unit from the Data List spreadsheet, End-User sheet.')
     .build();
-  cell.setDataValidation(rule);
+
+  // Prefer the input cell immediately to the right of the matching label.
+  // This handles layout changes where the End-user/Implementing Unit field
+  // moves, while preserving B9 as the known template fallback.
+  const scanRows = Math.min(14, destinationSheet.getMaxRows());
+  const scanCols = Math.min(destinationSheet.getMaxColumns(), 30);
+  const labels = destinationSheet.getRange(1, 1, scanRows, scanCols).getDisplayValues();
+  let target = null;
+  for (let r = 0; r < labels.length && !target; r++) {
+    for (let c = 0; c < labels[r].length; c++) {
+      const label = normalizeHeader_(labels[r][c]).replace(/[^a-z0-9]/g, '');
+      if (
+        label.includes('enduserorimplementingunit') ||
+        label === 'enduser' ||
+        label === 'implementingunit' ||
+        label.includes('enduserimplementingunit')
+      ) {
+        const targetColumn = c + 2;
+        if (targetColumn <= destinationSheet.getMaxColumns()) {
+          target = destinationSheet.getRange(r + 1, targetColumn);
+        }
+        break;
+      }
+    }
+  }
+
+  if (!target) target = destinationSheet.getRange('B9');
+  target.setDataValidation(rule);
 }
 
 /***************************************************************
