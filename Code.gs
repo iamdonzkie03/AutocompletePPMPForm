@@ -1060,24 +1060,17 @@ function updatePPMPSummary_(spreadsheet) {
   }
 
   // PPMP Form has a fixed layout: Category is column C and
-  // Estimated Budget is column M. Do not rely on merged template headings.
-  let formInfo;
-  if (formSheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET) {
-    formInfo = {
-      headerRow: 13,
-      categoryColumn: 3,
-      amountColumn: 13
-    };
-  } else {
-    formInfo =
-      findCategoryAmountHeaders_(formSheet) ||
-      findCategoryAmountHeadersFallback_(formSheet);
-  }
+  // Estimated Budget is column M. The summary must read those exact
+  // columns, independent of merged or repeated template headings.
+  const isPPMPForm = formSheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET;
+  const formInfo = isPPMPForm
+    ? { headerRow: 13, categoryColumn: 3, amountColumn: 13 }
+    : (findCategoryAmountHeaders_(formSheet) ||
+       findCategoryAmountHeadersFallback_(formSheet));
 
   if (!formInfo) {
     throw new Error(
-      'Could not identify the Category and Estimated Budget columns in PPMP Form. ' +
-      'Please check that both column headers exist in rows 1–10.'
+      'Could not identify the Category and Estimated Budget columns in PPMP Form.'
     );
   }
 
@@ -1097,27 +1090,29 @@ function updatePPMPSummary_(spreadsheet) {
   // Only PPMP Form line items from row 5 onward are eligible.
   // This deliberately excludes the first four rows, including any
   // header/summary content above the actual entries.
-  const firstDataRow = formSheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET ? 15 : 5;
+  const firstDataRow = isPPMPForm ? 15 : 5;
   const lastDataRow = formSheet.getLastRow();
-  const lastColumn = formSheet.getLastColumn();
 
   if (lastDataRow >= firstDataRow) {
+    // Read only Category (C) through Estimated Budget (M) on the PPMP
+    // Form. This uses a stable 11-column range and ignores all records
+    // above row 15.
     const data = formSheet.getRange(
       firstDataRow,
-      1,
+      formInfo.categoryColumn,
       lastDataRow - firstDataRow + 1,
-      lastColumn
+      formInfo.amountColumn - formInfo.categoryColumn + 1
     ).getValues();
 
     data.forEach(function(row) {
       const category = String(
-        row[formInfo.categoryColumn - 1] || ''
+        row[0] || ''
       ).trim();
 
       if (!category) return;
 
       const amount = parseNumericValue_(
-        row[formInfo.amountColumn - 1]
+        row[formInfo.amountColumn - formInfo.categoryColumn]
       );
 
       const key = normalizeValue_(category);
