@@ -1059,34 +1059,19 @@ function updatePPMPSummary_(spreadsheet) {
     );
   }
 
-  let formInfo =
-    findCategoryAmountHeaders_(formSheet);
-
-  // Fallback to the destination header map when the PPMP Form uses
-  // merged/multi-row headings that the summary header scan cannot detect.
-  if (!formInfo) {
-    const destinationInfo = findDestinationHeaders_(formSheet);
-    if (destinationInfo) {
-      const categoryColumn = destinationInfo.headerMap[
-        normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.category)
-      ];
-      const amountColumn = destinationInfo.headerMap[
-        normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget)
-      ];
-      if (categoryColumn !== undefined && amountColumn !== undefined) {
-        formInfo = {
-          headerRow: destinationInfo.headerRow,
-          categoryColumn: categoryColumn + 1,
-          amountColumn: amountColumn + 1
-        };
-      }
-    }
-  }
-
-  if (!formInfo) {
-    // Last-resort header lookup includes the full used width and
-    // recognizes common budget/ABC heading variants.
-    formInfo = findCategoryAmountHeadersFallback_(formSheet);
+  // PPMP Form has a fixed layout: Category is column C and
+  // Estimated Budget is column M. Do not rely on merged template headings.
+  let formInfo;
+  if (formSheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET) {
+    formInfo = {
+      headerRow: 13,
+      categoryColumn: 3,
+      amountColumn: 13
+    };
+  } else {
+    formInfo =
+      findCategoryAmountHeaders_(formSheet) ||
+      findCategoryAmountHeadersFallback_(formSheet);
   }
 
   if (!formInfo) {
@@ -1165,18 +1150,13 @@ function updatePPMPSummary_(spreadsheet) {
     summaryInfo.headerRow;
 
   if (availableRows > 0) {
+    // Keep the summary output limited to its Category and total-amount
+    // columns by removing stale values from the entire data area first.
     summarySheet.getRange(
       outputStartRow,
-      summaryInfo.categoryColumn,
+      1,
       availableRows,
-      1
-    ).clearContent();
-
-    summarySheet.getRange(
-      outputStartRow,
-      summaryInfo.amountColumn,
-      availableRows,
-      1
+      summarySheet.getMaxColumns()
     ).clearContent();
   }
 
