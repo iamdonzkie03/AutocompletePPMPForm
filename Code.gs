@@ -116,6 +116,14 @@ function setupEntryDropdownAndAutofill() {
   const modeDropdownsApplied =
     applyRecommendedModeDropdown_(spreadsheet);
 
+  // Enforce the exact PPMP Form rule after all validation routines:
+  // cells A4 (Column 1) and F4 (Column 6) must never have validation.
+  const ppmpFormSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  if (ppmpFormSheet && ppmpFormSheet.getMaxRows() >= 4) {
+    ppmpFormSheet.getRange('A4').clearDataValidations();
+    ppmpFormSheet.getRange('F4').clearDataValidations();
+  }
+
   // Recreate both installable edit triggers:
   // 1) edits inside PPMP Form; 2) edits inside the external Entries sheet.
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
@@ -224,6 +232,12 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
     sheet.getRange(
       validationStartRow, descriptionColumn + 1, availableRows, 1
     ).setDataValidation(rule);
+
+    // Explicitly clear the reported cells after applying validation.
+    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
+      sheet.getRange('A4').clearDataValidations();
+      sheet.getRange('F4').clearDataValidations();
+    }
 
     updated++;
   });
@@ -647,6 +661,12 @@ function applyRecommendedModeDropdown_(destinationSpreadsheet) {
       availableRows,
       1
     ).setDataValidation(rule);
+
+    // Explicitly clear the reported cells after applying mode validation.
+    if (sheet.getName() === ENTRY_CONFIG.PPMP_FORM_SHEET && sheet.getMaxRows() >= 4) {
+      sheet.getRange('A4').clearDataValidations();
+      sheet.getRange('F4').clearDataValidations();
+    }
 
     updated++;
   });
