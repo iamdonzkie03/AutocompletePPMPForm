@@ -74,6 +74,7 @@ function onOpen(e) {
   SpreadsheetApp.getUi()
     .createMenu('PPMP Form')
     .addItem('Add Entry Row', 'addPPMPEntryRow')
+    .addItem('Refresh End-User Dropdown (B9)', 'refreshEndUserDropdownB9')
     .addToUi();
 }
 
@@ -306,6 +307,33 @@ function addPPMPEntryRow() {
 
 
 /***************************************************************
+ * STANDALONE REPAIR FOR PPMP FORM!B9
+ *
+ * Run this directly if the main setup function fails for an unrelated
+ * reason. It reads Data List > End-User and applies validation to B9.
+ ***************************************************************/
+function refreshEndUserDropdownB9() {
+  const destinationSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (!destinationSpreadsheet) {
+    throw new Error('Open the destination spreadsheet containing PPMP Form, then run this function again.');
+  }
+
+  const sourceSpreadsheet = SpreadsheetApp.openById(
+    ENTRY_CONFIG.SOURCE_SPREADSHEET_ID
+  );
+
+  applyEndUserDropdownB9_(destinationSpreadsheet, sourceSpreadsheet);
+  SpreadsheetApp.flush();
+
+  destinationSpreadsheet.toast(
+    'End-user dropdown refreshed in PPMP Form!B9.',
+    'PPMP Form',
+    5
+  );
+}
+
+
+/***************************************************************
  * END-USER DROPDOWN IN PPMP FORM B9
  * Uses all nonblank values in column A, starting at row 2, from
  * the external Data List spreadsheet's End-User worksheet.
@@ -381,7 +409,9 @@ function refreshEntryDropdownOptions_(spreadsheet, sourceData) {
     );
   }
 
-  helperSheet.clearContents();
+  // Only refresh the description list in column A. Column B stores the
+  // separate End-User validation list for PPMP Form!B9 and must be preserved.
+  helperSheet.getRange(1, 1, helperSheet.getMaxRows(), 1).clearContent();
 
   if (sourceData.options.length) {
     helperSheet.getRange(
@@ -510,6 +540,13 @@ function handleEntriesSourceEdit(e) {
 
   const currentSourceData = loadSourceLookup_(sourceSheet);
   refreshEntryDropdownOptions_(destinationSpreadsheet, currentSourceData);
+
+  // Refresh the separate End-User list too, and restore B9 validation after
+  // updating the shared helper sheet.
+  const sourceSpreadsheet = SpreadsheetApp.openById(
+    ENTRY_CONFIG.SOURCE_SPREADSHEET_ID
+  );
+  applyEndUserDropdownB9_(destinationSpreadsheet, sourceSpreadsheet);
 
   const formInfo = findDestinationHeaders_(formSheet);
   if (!formInfo) throw new Error('Could not locate headers in PPMP Form.');
