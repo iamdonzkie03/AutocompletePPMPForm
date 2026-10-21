@@ -331,24 +331,10 @@ function addPPMPEntryRow() {
     .build();
   sheet.getRange(newRow, modeColumn + 1).setDataValidation(modeRule);
 
-  // FINAL BORDER PASS: the PPMP Form template uses the full A:O table
-  // width. Apply borders after all row setup and validation changes so the
-  // added row visibly continues the existing table grid.
-  const tableRange = sheet.getRange(newRow, 1, 1, 15);
-  tableRange.setBorder(
-    true, true, true, true, true, true,
-    '#000000',
-    SpreadsheetApp.BorderStyle.SOLID
-  );
-  // Reapply borders cell-by-cell as well, ensuring each table cell has its
-  // own visible outline (including internal vertical separators).
-  for (let col = 1; col <= 15; col++) {
-    sheet.getRange(newRow, col).setBorder(
-      true, true, true, true, true, true,
-      '#000000',
-      SpreadsheetApp.BorderStyle.SOLID
-    );
-  }
+  // FINAL BORDER PASS: run after formatting, content clearing, and dropdown setup.
+  // Apply the complete table grid across A:O in one operation. This works with
+  // merged cells and avoids errors caused by applying borders to part of a merge.
+  applyPPMPEntryRowBorders_(sheet, newRow);
   SpreadsheetApp.flush();
 
   spreadsheet.setActiveSheet(sheet);
@@ -358,6 +344,29 @@ function addPPMPEntryRow() {
     'PPMP Form', 5
   );
   return newRow;
+}
+
+
+/**
+ * Applies a solid black cell grid across the PPMP Form table columns A:O.
+ * The whole-row operation is safe for merged cells and sets horizontal and
+ * vertical borders after the row's content, formatting, and validations settle.
+ */
+function applyPPMPEntryRowBorders_(sheet, row) {
+  if (!sheet || row < 15) return;
+  const tableRange = sheet.getRange(row, 1, 1, 15); // A:O
+  tableRange.setBorder(
+    true, true, true, true, true, true,
+    '#000000',
+    SpreadsheetApp.BorderStyle.SOLID
+  );
+
+  // Reapply the row's bottom border as a clear horizontal separator.
+  tableRange.setBorder(
+    null, null, true, null, null, null,
+    '#000000',
+    SpreadsheetApp.BorderStyle.SOLID
+  );
 }
 
 
