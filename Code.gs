@@ -1059,17 +1059,46 @@ function updatePPMPSummary_(spreadsheet) {
     );
   }
 
-  const formInfo =
+  let formInfo =
     findCategoryAmountHeaders_(formSheet);
+
+  // Fallback to the destination header map when the PPMP Form uses
+  // merged/multi-row headings that the summary header scan cannot detect.
+  if (!formInfo) {
+    const destinationInfo = findDestinationHeaders_(formSheet);
+    if (destinationInfo) {
+      const categoryColumn = destinationInfo.headerMap[
+        normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.category)
+      ];
+      const amountColumn = destinationInfo.headerMap[
+        normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget)
+      ];
+      if (categoryColumn !== undefined && amountColumn !== undefined) {
+        formInfo = {
+          headerRow: destinationInfo.headerRow,
+          categoryColumn: categoryColumn + 1,
+          amountColumn: amountColumn + 1
+        };
+      }
+    }
+  }
+
+  if (!formInfo) {
+    // Last-resort header lookup includes the full used width and
+    // recognizes common budget/ABC heading variants.
+    formInfo = findCategoryAmountHeadersFallback_(formSheet);
+  }
 
   if (!formInfo) {
     throw new Error(
-      'Could not locate Category and an amount column in PPMP Form.'
+      'Could not identify the Category and Estimated Budget columns in PPMP Form. ' +
+      'Please check that both column headers exist in rows 1–10.'
     );
   }
 
   const summaryInfo =
-    findCategoryAmountHeaders_(summarySheet);
+    findCategoryAmountHeaders_(summarySheet) ||
+    findCategoryAmountHeadersFallback_(summarySheet);
 
   if (!summaryInfo) {
     throw new Error(
@@ -1194,6 +1223,63 @@ function updatePPMPSummary_(spreadsheet) {
     results.length,
     1
   ).setNumberFormat('#,##0.00');
+}
+
+
+/**
+ * Fallback header finder for templates with merged or multi-line headings.
+ * Returns 1-based column indexes, matching updatePPMPSummary_.
+ */
+function findCategoryAmountHeadersFallback_(sheet) {
+  const rowsToSearch = Math.min(sheet.getMaxRows(), 15);
+  const columnsToSearch = sheet.getLastColumn();
+  if (!rowsToSearch || !columnsToSearch) return null;
+
+  const values = sheet.getRange(
+    1, 1, rowsToSearch, columnsToSearch
+  ).getDisplayValues();
+
+  const categoryAliases = ['category', 'item category'];
+  const amountAliases = [
+    normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget),
+    'estimatedbudget',
+    'estimatedbudgetph',
+    'totalamount',
+    'totalabc',
+    'amount',
+    'abc'
+  ];
+
+  let categoryColumn = null;
+  let categoryHeaderRow = null;
+  let amountColumn = null;
+  let amountHeaderRow = null;
+
+  for (let r = 0; r < values.length; r++) {
+    for (let c = 0; c < values[r].length; c++) {
+      const header = normalizeHeader_(values[r][c]);
+      if (!header) continue;
+
+      if (categoryColumn === null && categoryAliases.indexOf(header) !== -1) {
+        categoryColumn = c + 1;
+        categoryHeaderRow = r + 1;
+      }
+
+      if (amountColumn === null && amountAliases.indexOf(header) !== -1) {
+        amountColumn = c + 1;
+        amountHeaderRow = r + 1;
+      }
+    }
+  }
+
+  if (categoryColumn === null || amountColumn === null) return null;
+
+  return {
+    headerRow: categoryHeaderRow,
+    categoryColumn: categoryColumn,
+    amountColumn: amountColumn,
+    amountHeaderRow: amountHeaderRow
+  };
 }
 
 
