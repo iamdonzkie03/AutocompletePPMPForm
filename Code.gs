@@ -174,6 +174,124 @@ function setupEntryDropdownAndAutofill() {
 
 
 /***************************************************************
+ * ADD A NEW PPMP FORM ENTRY ROW
+ *
+ * Assign the sheet's "Add Entry" button to addPPMPEntryRow.
+ * The new row inherits formatting and validations from the previous
+ * entry row, then receives fresh description and procurement-mode
+ * dropdowns. Existing rows and values are preserved.
+ ***************************************************************/
+function addPPMPEntryRow() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (!spreadsheet) throw new Error('No active spreadsheet was found.');
+
+  const sheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  if (!sheet) throw new Error('The PPMP Form sheet was not found.');
+
+  const info = findDestinationHeaders_(sheet);
+  if (!info) throw new Error('Could not identify the PPMP Form entry columns.');
+
+  const descriptionColumn = info.headerMap[
+    normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.description)
+  ];
+  const modeColumn = info.headerMap[
+    normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.recommendedMode)
+  ];
+  if (descriptionColumn === undefined || modeColumn === undefined) {
+    throw new Error('Could not identify the Description and Recommended Mode columns.');
+  }
+
+  const firstEntryRow = 15;
+  const lastDescriptionRow = findLastDescriptionEntryRow_(
+    sheet, descriptionColumn + 1, firstEntryRow
+  );
+  const newRow = Math.max(firstEntryRow, lastDescriptionRow + 1);
+
+  if (newRow > sheet.getMaxRows()) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), newRow - sheet.getMaxRows() + 1);
+  }
+
+  // Copy the previous row's visual layout and cell validation rules.
+  // For the first entry, copy the template's first entry row to itself.
+  const templateRow = Math.max(firstEntryRow, newRow - 1);
+  if (newRow !== templateRow) {
+    sheet.getRange(templateRow, 1, 1, sheet.getMaxColumns())
+      .copyTo(sheet.getRange(newRow, 1, 1, sheet.getMaxColumns()),
+        SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+    sheet.getRange(templateRow, 1, 1, sheet.getMaxColumns())
+      .copyTo(sheet.getRange(newRow, 1, 1, sheet.getMaxColumns()),
+        SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+    sheet.setRowHeight(newRow, sheet.getRowHeight(templateRow));
+  }
+
+  // New entry should be blank, without carrying forward the previous item's data.
+  sheet.getRange(newRow, 1, 1, sheet.getMaxColumns()).clearContent();
+
+  const sourceSpreadsheet = SpreadsheetApp.openById(
+    ENTRY_CONFIG.SOURCE_SPREADSHEET_ID
+  );
+  const sourceSheet = sourceSpreadsheet.getSheetByName(
+    ENTRY_CONFIG.SOURCE_SHEET_NAME
+  );
+  if (!sourceSheet) throw new Error('The source Entries worksheet was not found.');
+
+  const sourceData = loadSourceLookup_(sourceSheet);
+  if (!sourceData.options.length) {
+    throw new Error('No project descriptions were found in the Entries worksheet.');
+  }
+
+  let helperSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.HELPER_SHEET_NAME);
+  if (!helperSheet) helperSheet = spreadsheet.insertSheet(ENTRY_CONFIG.HELPER_SHEET_NAME);
+  helperSheet.clearContents();
+  helperSheet.getRange(1, 1, sourceData.options.length, 1)
+    .setValues(sourceData.options.map(function(value) { return [value]; }));
+  if (!helperSheet.isSheetHidden()) helperSheet.hideSheet();
+
+  const descriptionRule = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(helperSheet.getRange(1, 1, sourceData.options.length, 1), true)
+    .setAllowInvalid(false)
+    .setHelpText('Select a project description from the Entries source.')
+    .build();
+  sheet.getRange(newRow, descriptionColumn + 1).setDataValidation(descriptionRule);
+
+  const modesSheet = sourceSpreadsheet.getSheetByName(ENTRY_CONFIG.MODES_SHEET_NAME);
+  if (!modesSheet || modesSheet.getLastRow() < ENTRY_CONFIG.MODES_START_ROW) {
+    throw new Error('The Modes worksheet contains no procurement modes.');
+  }
+  const rawModes = modesSheet.getRange(
+    ENTRY_CONFIG.MODES_START_ROW, ENTRY_CONFIG.MODES_COLUMN,
+    modesSheet.getLastRow() - ENTRY_CONFIG.MODES_START_ROW + 1, 1
+  ).getDisplayValues();
+  const modes = [];
+  const seenModes = new Set();
+  rawModes.forEach(function(row) {
+    const mode = String(row[0] || '').trim();
+    if (!mode) return;
+    const header = normalizeHeader_(mode);
+    if (header === 'modeofprocurement' || header === 'modes' ||
+        header === 'recommendedmodeofprocurement') return;
+    const key = normalizeValue_(mode);
+    if (!seenModes.has(key)) { seenModes.add(key); modes.push(mode); }
+  });
+  if (!modes.length) throw new Error('No procurement modes were found.');
+  const modeRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(modes, true)
+    .setAllowInvalid(false)
+    .setHelpText('Select a procurement mode from the Modes worksheet.')
+    .build();
+  sheet.getRange(newRow, modeColumn + 1).setDataValidation(modeRule);
+
+  spreadsheet.setActiveSheet(sheet);
+  sheet.setActiveRange(sheet.getRange(newRow, descriptionColumn + 1));
+  spreadsheet.toast(
+    'Added entry row ' + newRow + ' with dropdowns and automatic autofill support.',
+    'PPMP Form', 5
+  );
+  return newRow;
+}
+
+
+/***************************************************************
  * END-USER DROPDOWN IN PPMP FORM B9
  * Uses all nonblank values in column A, starting at row 2, from
  * the external Data List spreadsheet's End-User worksheet.
