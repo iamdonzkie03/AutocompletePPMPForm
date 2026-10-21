@@ -242,6 +242,25 @@ function addPPMPEntryRow() {
     sheet.setRowHeight(newRow, sheet.getRowHeight(templateRow));
   }
 
+  // Extend the PPMP table grid to the newly added entry row. Copying the
+  // row format preserves the template styling; explicitly reapply the table
+  // borders so the grid continues when entries extend past the original range.
+  const tableLastColumn = Math.max(
+    descriptionColumn,
+    modeColumn,
+    info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.classification)] ?? 0,
+    info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.category)] ?? 0,
+    info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.quantity)] ?? 0,
+    info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.uom)] ?? 0,
+    info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.unitCost)] ?? 0,
+    info.headerMap[normalizeHeader_(ENTRY_CONFIG.DESTINATION_HEADERS.estimatedBudget)] ?? 0
+  ) + 1;
+  sheet.getRange(newRow, 1, 1, tableLastColumn).setBorder(
+    true, true, true, true, true, true,
+    '#000000',
+    SpreadsheetApp.BorderStyle.SOLID
+  );
+
   // New entry should be blank, without carrying forward the previous item's data.
   sheet.getRange(newRow, 1, 1, sheet.getMaxColumns()).clearContent();
 
@@ -303,21 +322,6 @@ function addPPMPEntryRow() {
 
   spreadsheet.setActiveSheet(sheet);
   sheet.setActiveRange(sheet.getRange(newRow, descriptionColumn + 1));
-  // Rebuild the visible control after adding an entry. The new row is blank,
-  // so temporarily place the control one row below it; the next edit/setup
-  // will keep the control positioned after the last populated description.
-  const controlRow = newRow + 1;
-  if (controlRow > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1);
-  const controlCell = sheet.getRange(controlRow, 1);
-  const labelCell = sheet.getRange(controlRow, 2);
-  controlCell.clearContent().clearDataValidations().insertCheckboxes().setValue(false);
-  controlCell.setHorizontalAlignment('center').setVerticalAlignment('middle').setBackground('#d9ead3')
-    .setNote('Check this box to add a new PPMP entry row.');
-  labelCell.setValue('＋ ADD ENTRY ROW').setFontWeight('bold')
-    .setHorizontalAlignment('left').setVerticalAlignment('middle').setBackground('#d9ead3')
-    .setNote('Check the box in column A to add a new entry row.');
-  sheet.setRowHeight(controlRow, Math.max(28, sheet.getRowHeight(controlRow)));
-
   spreadsheet.toast(
     'Added entry row ' + newRow + ' with dropdowns and automatic autofill support.',
     'PPMP Form', 5
