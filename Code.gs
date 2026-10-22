@@ -1803,9 +1803,20 @@ function processPPMPFormEditDirect_(e, spreadsheet) {
   const descriptionWasEdited = firstCol <= 1 && lastCol >= 1;
   const quantityWasEdited = firstCol <= 4 && lastCol >= 4;
   const costWasEdited = firstCol <= 12 && lastCol >= 12;
+  const autoFilledFieldWasEdited =
+    (firstCol <= 2 && lastCol >= 2) ||
+    (firstCol <= 3 && lastCol >= 3) ||
+    (firstCol <= 5 && lastCol >= 5);
 
-  // Ignore edits unrelated to General Description, Quantity, or Unit Cost.
-  if (!descriptionWasEdited && !quantityWasEdited && !costWasEdited) return;
+  // If an owner edits a protected source-derived field, an installable edit
+  // trigger cannot block the keystroke, but it can restore the source value.
+  // Treat edits to B/C/E as a request to re-resolve the row from Entries.
+  if (
+    !descriptionWasEdited &&
+    !quantityWasEdited &&
+    !costWasEdited &&
+    !autoFilledFieldWasEdited
+  ) return;
 
   const sourceSpreadsheet = SpreadsheetApp.openById(
     ENTRY_CONFIG.SOURCE_SPREADSHEET_ID
