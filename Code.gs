@@ -107,22 +107,86 @@ function setupPPMPAutofillTriggerOnly() {
  */
 function testRepairSelectedPPMPRow() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) throw new Error('Open the destination PPMP spreadsheet first.');
+  if (!ss) throw new Error('Open the destination spreadsheet first.');
+
   const sheet = ss.getActiveSheet();
   if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) {
-    throw new Error('Select a row on the PPMP Form sheet first.');
+    throw new Error('Select the PPMP Form sheet first.');
   }
 
-  const row = sheet.getActiveRange().getRow();
-  if (row < 15) throw new Error('Select a line-item row starting at row 15.');
+  const activeRange = sheet.getActiveRange();
+  if (!activeRange) throw new Error('Select a line-item cell first.');
+  const row = activeRange.getRow();
+  if (row < 15) {
+    throw new Error('Select a line-item row starting at row 15.');
+  }
 
-  const event = {
-    range: sheet.getRange(row, 1),
-    source: ss
-  };
-  handlePPMPFormEdit(event);
+  const selected = String(
+    sheet.getRange(row, 1).getDisplayValue() || ''
+  ).trim();
 
-  ss.toast('Processed PPMP Form row ' + row + '. Check columns B, C, E, L and M.', 'PPMP Form', 8);
+  if (!selected) {
+    const message = 'PPMP Form!A' + row +
+      ' is blank. Select a General Description first.';
+    ss.toast(message, 'PPMP Autofill Diagnostic', 10);
+    throw new Error(message);
+  }
+
+  const sourceSS = SpreadsheetApp.openById(
+    ENTRY_CONFIG.SOURCE_SPREADSHEET_ID
+  );
+  const sourceSheet = sourceSS.getSheetByName(
+    ENTRY_CONFIG.SOURCE_SHEET_NAME
+  );
+
+  if (!sourceSheet) {
+    throw new Error('The source Entries worksheet was not found.');
+  }
+
+  const sourceData = loadSourceLookup_(sourceSheet);
+  const record = findMatchingEntryRecord_(
+    selected,
+    sourceData.lookup
+  );
+
+  if (!record) {
+    const message = 'No matching source record for A' + row +
+      '. Selected value: "' + selected +
+      '". Source options loaded: ' + sourceData.options.length +
+      '. Examples: ' + sourceData.options.slice(0, 3).join(' | ');
+    ss.toast(message, 'PPMP Autofill Diagnostic', 12);
+    throw new Error(message);
+  }
+
+  sheet.getRange(row, 2).setValue(record.classification || '');
+  sheet.getRange(row, 3).setValue(record.category || '');
+  sheet.getRange(row, 5).setValue(record.uom || '');
+
+  const cost = parseNumericValue_(record.unitCost);
+  if (cost === null) {
+    sheet.getRange(row, 12).clearContent();
+  } else {
+    sheet.getRange(row, 12).setValue(cost);
+  }
+
+  const qty = parseNumericValue_(
+    sheet.getRange(row, 4).getValue()
+  );
+
+  if (cost === null || qty === null) {
+    sheet.getRange(row, 13).clearContent();
+  } else {
+    sheet.getRange(row, 13).setValue(cost * qty);
+  }
+
+  SpreadsheetApp.flush();
+
+  ss.toast(
+    'Source match found for row ' + row +
+    '. Check B, C, E, L and M.',
+    'PPMP Autofill Diagnostic',
+    8
+  );
 }
 
 
