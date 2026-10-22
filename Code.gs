@@ -907,11 +907,17 @@ function findSourceHeaders_(values) {
       'Technical Specifications', 'Technical Specification',
       'Specifications', 'Specification', 'Technical Description'
     ],
+    // Use specific UOM headers only. A generic header such as "Unit"
+    // can accidentally match an unrelated column before the actual UOM column.
     uom: [
-      'Unit or Measurement/Size', 'Unit or Measurement Size',
-      'Unit/Measurement/Size', 'Unit/Measure/Size',
-      'Unit of Measurement', 'Unit of Measure', 'Measurement/Size',
-      'Measurement', 'UOM', 'Unit'
+      'UOM',
+      'Unit of Measurement',
+      'Unit of Measure',
+      'Unit or Measurement/Size',
+      'Unit or Measurement Size',
+      'Unit/Measurement/Size',
+      'Unit/Measure/Size',
+      'Measurement/Size'
     ],
     unitCost: [
       'Unit Cost', 'Cost per Unit', 'Price per Unit',
