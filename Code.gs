@@ -1641,13 +1641,12 @@ function handlePPMPFormEdit(e) {
     return;
   }
 
-  // Autofill is for General Description in column A, beginning at row 15.
-  // Do not reject multi-cell edits that include column A.
-  if (editedRange.getLastRow() < 15 ||
-      editedRange.getColumn() > 1 ||
-      editedRange.getLastColumn() < 1) {
+  // Process edits that intersect the General Description column A.
+  // This supports A1 as requested as well as the PPMP line-item rows.
+  // The processor only writes fields when the cell value matches Entries.
+  if (editedRange.getColumn() > 1 || editedRange.getLastColumn() < 1) {
     console.log(
-      'PPMP AUTOFILL STOP: Edit does not intersect column A at row 15 or later.'
+      'PPMP AUTOFILL STOP: Edit does not intersect General Description column A.'
     );
     return;
   }
@@ -1718,7 +1717,7 @@ function processPPMPFormEditDirect_(e, spreadsheet) {
   const lastRow = editedRange.getLastRow();
   const firstCol = editedRange.getColumn();
   const lastCol = editedRange.getLastColumn();
-  if (lastRow < 15) return;
+  if (lastRow < 1) return;
 
   const descriptionWasEdited = firstCol <= 1 && lastCol >= 1;
   const quantityWasEdited = firstCol <= 4 && lastCol >= 4;
@@ -1735,7 +1734,7 @@ function processPPMPFormEditDirect_(e, spreadsheet) {
   const sourceData = loadSourceLookup_(sourceSheet);
   const lookup = sourceData.lookup;
 
-  for (let row = Math.max(15, firstRow); row <= lastRow; row++) {
+  for (let row = firstRow; row <= lastRow; row++) {
     const descriptionCell = sheet.getRange(row, 1);
     const selectedDescription = String(
       descriptionCell.getDisplayValue() || ''
