@@ -71,12 +71,8 @@ const ENTRY_CONFIG = {
  * This menu provides an immediately usable Add Entry command.
  ***************************************************************/
 function onOpen(e) {
-  SpreadsheetApp.getUi()
-    .createMenu('PPMP Form')
-    .addItem('Refresh End-User Dropdown (B9)', 'refreshEndUserDropdownB9')
-    .addItem('Test / Repair Selected PPMP Row', 'testRepairSelectedPPMPRow')
-    .addItem('Enable Automatic PPMP Autofill (Run Once)', 'setupPPMPAutofillTriggerOnly')
-    .addToUi();
+  // Intentionally do not add a custom menu to the spreadsheet UI.
+  // Installable edit triggers handle user edits automatically.
 }
 
 /**
