@@ -262,6 +262,53 @@ function testRepairSelectedPPMPRow() {
  * Run this function manually once after saving the code.
  ***************************************************************/
 
+/**
+ * Protect and grey the four source-populated PPMP fields.
+ * Data rows begin at row 15. The installable trigger owner can continue
+ * populating these protected cells through the autofill handler.
+ */
+function protectAutoFilledPPMPFields_(sheet) {
+  if (!sheet) throw new Error('PPMP FORM sheet was not found.');
+
+  const firstEntryRow = 15;
+  const rowCount = sheet.getMaxRows() - firstEntryRow + 1;
+  if (rowCount < 1) return;
+
+  const fields = [
+    { column: 2, label: 'Type of the Project to be Procured' },
+    { column: 3, label: 'Category' },
+    { column: 5, label: 'Unit or Measurement/Size' },
+    { column: 12, label: 'Unit Cost' }
+  ];
+  const protectionPrefix = 'PPMP AUTOFILL LOCK - ';
+
+  fields.forEach(function(field) {
+    const range = sheet.getRange(firstEntryRow, field.column, rowCount, 1);
+    range.setBackground('#e0e0e0');
+
+    const description = protectionPrefix + field.label;
+    // Replace only this helper's own protections, not unrelated protections.
+    sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(function(p) {
+      if (p.getDescription() === description) p.remove();
+    });
+
+    const protection = range.protect();
+    protection.setDescription(description);
+    protection.setWarningOnly(false);
+
+    // Limit editing to the account running setup / owning the trigger.
+    // Google Sheets always retains the spreadsheet owner as an editor.
+    const effectiveUser = Session.getEffectiveUser();
+    const effectiveEmail = effectiveUser ? effectiveUser.getEmail() : '';
+    protection.getEditors().forEach(function(editor) {
+      if (!effectiveEmail || editor.getEmail() !== effectiveEmail) {
+        try { protection.removeEditor(editor); } catch (err) {}
+      }
+    });
+    try { protection.setDomainEdit(false); } catch (err) {}
+  });
+}
+
 function setupEntryDropdownAndAutofill() {
   const spreadsheet =
     SpreadsheetApp.getActiveSpreadsheet();
@@ -294,6 +341,7 @@ function setupEntryDropdownAndAutofill() {
   const ppmpFormSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
   if (!ppmpFormSheet) throw new Error('The PPMP Form sheet was not found.');
   initializePPMPEntryTable_(ppmpFormSheet);
+  protectAutoFilledPPMPFields_(ppmpFormSheet);
   removeLegacyAddEntryRowLabel_(ppmpFormSheet);
 
   if (sourceData.options.length === 0) {
