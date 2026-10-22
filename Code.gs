@@ -130,7 +130,7 @@ function setupPPMPAutofillTriggerOnly() {
   }
 
   ss.toast(
-    'Automatic PPMP autofill is enabled for this spreadsheet. Choose a General Description in PPMP Form, column A, row 15 or later.',
+    'Automatic PPMP autofill is enabled. Choose a General Description in PPMP Form column A; Quantity in D and Unit Cost in L recalculate Estimated Budget in M.',
     'PPMP Form',
     10
   );
@@ -138,7 +138,7 @@ function setupPPMPAutofillTriggerOnly() {
 
 /**
  * Manual diagnostic/fallback: select any cell on the PPMP Form row to test,
- * then use PPMP Form > Test / Repair Selected PPMP Row.
+ * then run testRepairSelectedPPMPRow from the Apps Script editor.
  */
 function testRepairSelectedPPMPRow() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -175,9 +175,6 @@ function testRepairSelectedPPMPRow() {
   }
 
   const row = activeRange.getRow();
-  if (row < 15) {
-    throw new Error('Select a line-item row starting at row 15.');
-  }
 
   const selected = String(
     sheet.getRange(row, 1).getDisplayValue() || ''
@@ -1719,7 +1716,7 @@ function handlePPMPFormEdit(e) {
 /**
  * Deterministic PPMP Form edit processor for the known template layout:
  * A Description, B Classification, C Category, D Quantity, E UOM,
- * L Unit Cost, M Estimated Budget. Line items begin at row 15.
+ * L Unit Cost, M Estimated Budget. Supports row 1 and all later rows.
  *
  * This deliberately avoids dynamic header detection because the template uses
  * merged and multi-row headers that can be ambiguous.
@@ -1735,12 +1732,10 @@ function processPPMPFormEditDirect_(e, spreadsheet) {
   const lastCol = editedRange.getLastColumn();
   if (lastRow < 1) return;
 
-  // The line-item table starts at row 15. Ignore metadata/header edits.
-  // Keep this guard in the processor as well as the event handler so direct
-  // diagnostic calls cannot accidentally write into the form heading.
-  if (lastRow < 15) return;
-
-  const rowStart = Math.max(15, firstRow);
+  // General Description can be entered in A1 or any later row. Do not
+  // silently ignore earlier rows: the user explicitly needs the same
+  // lookup-and-fill behavior wherever the description is selected.
+  const rowStart = Math.max(1, firstRow);
   const descriptionWasEdited = firstCol <= 1 && lastCol >= 1;
   const quantityWasEdited = firstCol <= 4 && lastCol >= 4;
   const costWasEdited = firstCol <= 12 && lastCol >= 12;
