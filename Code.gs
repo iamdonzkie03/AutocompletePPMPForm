@@ -1610,29 +1610,79 @@ function autoSuggestEntriesOnEdit(e) {
 
 
 function handlePPMPFormEdit(e) {
-  if (!e || !e.range || !e.source) return;
+  if (!e || !e.range || !e.source) {
+    console.error(
+      'PPMP AUTOFILL DIAGNOSTIC: Missing edit event, range, or source. ' +
+      'Do not run handlePPMPFormEdit manually; test by editing the sheet.'
+    );
+    return;
+  }
 
-  const sheet = e.range.getSheet();
-  if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) return;
-
+  const editedRange = e.range;
+  const sheet = editedRange.getSheet();
   const spreadsheet = e.source;
-  // This toast confirms the installable trigger actually received the edit.
-  // It is intentionally short-lived to diagnose cases where no autofill occurs.
-  spreadsheet.toast('Autofill trigger received edit at ' + e.range.getA1Notation(), 'PPMP Form', 3);
+
+  // Record enough context to diagnose wrong-project, wrong-sheet, and
+  // wrong-cell issues in Apps Script > Executions > Logs.
+  console.log('PPMP AUTOFILL EVENT: ' + JSON.stringify({
+    spreadsheetId: spreadsheet.getId(),
+    spreadsheetName: spreadsheet.getName(),
+    sheetName: sheet.getName(),
+    editedRange: editedRange.getA1Notation(),
+    firstRow: editedRange.getRow(),
+    lastRow: editedRange.getLastRow(),
+    firstColumn: editedRange.getColumn(),
+    lastColumn: editedRange.getLastColumn(),
+    displayedValue: editedRange.getDisplayValue(),
+    triggerUid: e.triggerUid || 'Not provided'
+  }));
+
+  if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) {
+    console.log(
+      'PPMP AUTOFILL STOP: Expected sheet "' +
+      ENTRY_CONFIG.PPMP_FORM_SHEET + '", received "' + sheet.getName() + '".'
+    );
+    return;
+  }
+
+  // Autofill is for General Description in column A, beginning at row 15.
+  // Do not reject multi-cell edits that include column A.
+  if (editedRange.getLastRow() < 15 ||
+      editedRange.getColumn() > 1 ||
+      editedRange.getLastColumn() < 1) {
+    console.log(
+      'PPMP AUTOFILL STOP: Edit does not intersect column A at row 15 or later.'
+    );
+    return;
+  }
+
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+  let lockAcquired = false;
 
   try {
-    // Keep the line-item autofill separate from summary refresh so errors
-    // are visible to the user instead of silently leaving every field blank.
+    lock.waitLock(30000);
+    lockAcquired = true;
+
+    console.log(
+      'PPMP AUTOFILL PASS: Event reached the expected sheet and line-item range.'
+    );
+
+    // Process the item fields first. Any source access, lookup, or write error
+    // is logged and shown in a toast rather than silently leaving blanks.
     processPPMPFormEditDirect_(e, spreadsheet);
     SpreadsheetApp.flush();
+
+    console.log('PPMP AUTOFILL PASS: Direct edit processor returned.');
 
     try {
       updatePPMPSummary_(spreadsheet);
       SpreadsheetApp.flush();
+      console.log('PPMP AUTOFILL PASS: PPMP Summary refreshed.');
     } catch (summaryError) {
-      console.error('PPMP Summary refresh failed: ' + (summaryError.stack || summaryError.message));
+      console.error(
+        'PPMP SUMMARY DIAGNOSTIC ERROR: ' +
+        (summaryError.stack || summaryError.message || summaryError)
+      );
       spreadsheet.toast(
         'PPMP Summary refresh failed: ' + summaryError.message,
         'PPMP Summary',
@@ -1640,14 +1690,18 @@ function handlePPMPFormEdit(e) {
       );
     }
   } catch (autofillError) {
-    console.error('PPMP Form autofill failed: ' + (autofillError.stack || autofillError.message));
+    console.error(
+      'PPMP AUTOFILL DIAGNOSTIC ERROR: ' +
+      (autofillError.stack || autofillError.message || autofillError)
+    );
     spreadsheet.toast(
-      'Autofill failed: ' + autofillError.message,
+      'Autofill failed: ' + (autofillError.message || autofillError),
       'PPMP Form',
       12
     );
+    throw autofillError;
   } finally {
-    lock.releaseLock();
+    if (lockAcquired) lock.releaseLock();
   }
 }
 
