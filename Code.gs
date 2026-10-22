@@ -295,6 +295,7 @@ function protectAutoFilledPPMPFields_(sheet) {
     const protection = range.protect();
     protection.setDescription(description);
     protection.setWarningOnly(false);
+    protection.setUnprotectedRanges([]);
 
     // Limit editing to the account running setup / owning the trigger.
     // Google Sheets always retains the spreadsheet owner as an editor.
@@ -1705,18 +1706,21 @@ function handlePPMPFormEdit(e) {
     return;
   }
 
-  // Process edits that intersect a field that affects autofill or calculations:
-  // A = General Description, D = Quantity, L = Unit Cost.
-  // A edits populate B/C/E/L and calculate M; D/L edits recalculate M.
-  // Do not return early for D/L, otherwise Estimated Budget never updates
-  // when the user changes quantity or unit cost.
+  // Keep source-derived fields read-only in practice as well as protected:
+  // if an owner/editor manually changes B, C, E, or L, immediately restore
+  // them from the source Entries record for that row.
   const editFirstColumn = editedRange.getColumn();
   const editLastColumn = editedRange.getLastColumn();
   const affectsDescription = editFirstColumn <= 1 && editLastColumn >= 1;
   const affectsQuantity = editFirstColumn <= 4 && editLastColumn >= 4;
+  const affectsAutoFilledField =
+    (editFirstColumn <= 2 && editLastColumn >= 2) ||
+    (editFirstColumn <= 3 && editLastColumn >= 3) ||
+    (editFirstColumn <= 5 && editLastColumn >= 5) ||
+    (editFirstColumn <= 12 && editLastColumn >= 12);
   const affectsUnitCost = editFirstColumn <= 12 && editLastColumn >= 12;
 
-  if (!affectsDescription && !affectsQuantity && !affectsUnitCost) {
+  if (!affectsDescription && !affectsQuantity && !affectsAutoFilledField) {
     console.log(
       'PPMP AUTOFILL STOP: Edit does not intersect General Description (A), Quantity (D), or Unit Cost (L).'
     );
