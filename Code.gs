@@ -298,16 +298,25 @@ function protectAutoFilledPPMPFields_(sheet) {
 
     // Range protections do not support unprotected subranges. Keep the entire
     // protected range locked; no setUnprotectedRanges call belongs here.
-    // Limit editing to the account running setup / owning the trigger.
-    // Google Sheets always retains the spreadsheet owner as an editor.
+    // Strictly restrict this range to the account running setup.
+    // Editors removed here will be blocked by Google Sheets' native protection.
     const effectiveUser = Session.getEffectiveUser();
     const effectiveEmail = effectiveUser ? effectiveUser.getEmail() : '';
+    if (!effectiveEmail) {
+      throw new Error(
+        'Could not identify the account running setup. Run setupEntryDropdownAndAutofill ' +
+        'while signed in to the spreadsheet-owning/authorized account.'
+      );
+    }
+
     protection.getEditors().forEach(function(editor) {
-      if (!effectiveEmail || editor.getEmail() !== effectiveEmail) {
-        try { protection.removeEditor(editor); } catch (err) {}
+      if (editor.getEmail() !== effectiveEmail) {
+        protection.removeEditor(editor);
       }
     });
+    protection.addEditor(effectiveEmail);
     try { protection.setDomainEdit(false); } catch (err) {}
+    if (protection.isWarningOnly()) protection.setWarningOnly(false);
   });
 }
 
@@ -343,7 +352,6 @@ function setupEntryDropdownAndAutofill() {
   const ppmpFormSheet = spreadsheet.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
   if (!ppmpFormSheet) throw new Error('The PPMP Form sheet was not found.');
   initializePPMPEntryTable_(ppmpFormSheet);
-  protectAutoFilledPPMPFields_(ppmpFormSheet);
   removeLegacyAddEntryRowLabel_(ppmpFormSheet);
 
   if (sourceData.options.length === 0) {
@@ -412,10 +420,30 @@ function setupEntryDropdownAndAutofill() {
     .onChange()
     .create();
 
+  // Apply strict source-field protections LAST, after dropdowns, row setup,
+  // and trigger configuration, so later setup routines cannot interfere.
+  protectAutoFilledPPMPFields_(ppmpFormSheet);
+
   // Populate PPMP Summary immediately.
   updatePPMPSummary_(spreadsheet);
 
   SpreadsheetApp.flush();
+
+  // Log the final protections for verification in Apps Script > Executions.
+  console.log('PPMP AUTOFILL PROTECTIONS APPLIED: ' + JSON.stringify(
+    ppmpFormSheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
+      .filter(function(p) {
+        return String(p.getDescription() || '').indexOf('PPMP AUTOFILL LOCK - ') === 0;
+      })
+      .map(function(p) {
+        return {
+          description: p.getDescription(),
+          range: p.getRange().getA1Notation(),
+          warningOnly: p.isWarningOnly(),
+          editors: p.getEditors().map(function(editor) { return editor.getEmail(); })
+        };
+      })
+  ));
 
   spreadsheet.toast(
     'Setup complete. Description dropdowns: ' +
