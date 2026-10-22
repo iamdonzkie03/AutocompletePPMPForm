@@ -295,8 +295,9 @@ function protectAutoFilledPPMPFields_(sheet) {
     const protection = range.protect();
     protection.setDescription(description);
     protection.setWarningOnly(false);
-    protection.setUnprotectedRanges([]);
 
+    // Range protections do not support unprotected subranges. Keep the entire
+    // protected range locked; no setUnprotectedRanges call belongs here.
     // Limit editing to the account running setup / owning the trigger.
     // Google Sheets always retains the spreadsheet owner as an editor.
     const effectiveUser = Session.getEffectiveUser();
