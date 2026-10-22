@@ -59,7 +59,7 @@ const ENTRY_CONFIG = {
       'Recommended Mode of Procurement'
   },
 
-  PPMP_FORM_SHEET: 'PPMP Form',
+  PPMP_FORM_SHEET: 'PPMP FORM',
   PPMP_SUMMARY_SHEET: 'PPMP Summary'
 };
 
