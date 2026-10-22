@@ -109,13 +109,36 @@ function testRepairSelectedPPMPRow() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) throw new Error('Open the destination spreadsheet first.');
 
-  const sheet = ss.getActiveSheet();
-  if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) {
-    throw new Error('Select the PPMP Form sheet first.');
+  // Always resolve the intended worksheet by its configured name. Do not
+  // reject the test just because Apps Script reports another active tab.
+  const sheet = ss.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  if (!sheet) {
+    const names = ss.getSheets().map(function (s) {
+      return '"' + s.getName() + '"';
+    }).join(', ');
+    throw new Error(
+      'Could not find the worksheet named "' +
+      ENTRY_CONFIG.PPMP_FORM_SHEET + '". Available sheets: ' + names
+    );
   }
 
-  const activeRange = sheet.getActiveRange();
-  if (!activeRange) throw new Error('Select a line-item cell first.');
+  let activeRange = null;
+  const activeSheet = ss.getActiveSheet();
+  if (activeSheet && activeSheet.getSheetId() === sheet.getSheetId()) {
+    activeRange = sheet.getActiveRange();
+  } else {
+    // Some menu/editor execution contexts do not report the expected tab as
+    // active. Ask the user to select the intended row, then rerun.
+    ss.setActiveSheet(sheet);
+    activeRange = sheet.getActiveRange();
+  }
+
+  if (!activeRange) {
+    throw new Error(
+      'The PPMP Form sheet was found. Select a cell in the desired line-item row (row 15 or later), then run the test again.'
+    );
+  }
+
   const row = activeRange.getRow();
   if (row < 15) {
     throw new Error('Select a line-item row starting at row 15.');
