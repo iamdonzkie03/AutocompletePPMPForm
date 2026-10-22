@@ -74,7 +74,55 @@ function onOpen(e) {
   SpreadsheetApp.getUi()
     .createMenu('PPMP Form')
     .addItem('Refresh End-User Dropdown (B9)', 'refreshEndUserDropdownB9')
+    .addItem('Test / Repair Selected PPMP Row', 'testRepairSelectedPPMPRow')
+    .addItem('Reinstall PPMP Autofill Trigger', 'setupPPMPAutofillTriggerOnly')
     .addToUi();
+}
+
+/**
+ * Recreate the installable edit trigger for the currently active destination
+ * spreadsheet. Run from the bound Apps Script project attached to PPMP Form.
+ */
+function setupPPMPAutofillTriggerOnly() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('Open the destination PPMP spreadsheet first.');
+
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'handlePPMPFormEdit') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+
+  ScriptApp.newTrigger('handlePPMPFormEdit')
+    .forSpreadsheet(ss)
+    .onEdit()
+    .create();
+
+  ss.toast('PPMP autofill edit trigger installed. Select a description in column A from row 15 onward to test.', 'PPMP Form', 8);
+}
+
+/**
+ * Manual diagnostic/fallback: select any cell on the PPMP Form row to test,
+ * then use PPMP Form > Test / Repair Selected PPMP Row.
+ */
+function testRepairSelectedPPMPRow() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('Open the destination PPMP spreadsheet first.');
+  const sheet = ss.getActiveSheet();
+  if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) {
+    throw new Error('Select a row on the PPMP Form sheet first.');
+  }
+
+  const row = sheet.getActiveRange().getRow();
+  if (row < 15) throw new Error('Select a line-item row starting at row 15.');
+
+  const event = {
+    range: sheet.getRange(row, 1),
+    source: ss
+  };
+  handlePPMPFormEdit(event);
+
+  ss.toast('Processed PPMP Form row ' + row + '. Check columns B, C, E, L and M.', 'PPMP Form', 8);
 }
 
 
@@ -1450,6 +1498,9 @@ function handlePPMPFormEdit(e) {
   if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) return;
 
   const spreadsheet = e.source;
+  // This toast confirms the installable trigger actually received the edit.
+  // It is intentionally short-lived to diagnose cases where no autofill occurs.
+  spreadsheet.toast('Autofill trigger received edit at ' + e.range.getA1Notation(), 'PPMP Form', 3);
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
