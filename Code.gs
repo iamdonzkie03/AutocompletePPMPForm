@@ -898,10 +898,13 @@ function loadSourceLookup_(sourceSheet) {
 
 function findSourceHeaders_(values) {
   const aliases = {
+    // Prefer the source field explicitly requested for the PPMP description.
+    // If both Item Description and a pre-combined General Description exist,
+    // build the dropdown from Item Description + Technical Specifications.
     description: [
+      'Item Description', 'Item Name', 'Generic Name',
       'General Description/Generic Name', 'General Description',
-      'General Description Generic Name', 'Generic Name', 'Item Name',
-      'Description', 'Item Description', 'Project Description'
+      'General Description Generic Name', 'Description', 'Project Description'
     ],
     specifications: [
       'Technical Specifications', 'Technical Specification',
