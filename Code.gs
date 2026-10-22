@@ -75,7 +75,7 @@ function onOpen(e) {
     .createMenu('PPMP Form')
     .addItem('Refresh End-User Dropdown (B9)', 'refreshEndUserDropdownB9')
     .addItem('Test / Repair Selected PPMP Row', 'testRepairSelectedPPMPRow')
-    .addItem('Reinstall PPMP Autofill Trigger', 'setupPPMPAutofillTriggerOnly')
+    .addItem('Enable Automatic PPMP Autofill (Run Once)', 'setupPPMPAutofillTriggerOnly')
     .addToUi();
 }
 
@@ -85,8 +85,24 @@ function onOpen(e) {
  */
 function setupPPMPAutofillTriggerOnly() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) throw new Error('Open the destination PPMP spreadsheet first.');
+  if (!ss) {
+    throw new Error(
+      'Open the destination spreadsheet that contains the PPMP Form tab, then run this command again.'
+    );
+  }
 
+  const targetSheet = ss.getSheetByName(ENTRY_CONFIG.PPMP_FORM_SHEET);
+  if (!targetSheet) {
+    throw new Error(
+      'This spreadsheet does not contain a tab named "' +
+      ENTRY_CONFIG.PPMP_FORM_SHEET +
+      '". Open the correct destination spreadsheet before enabling automatic autofill.'
+    );
+  }
+
+  // Remove duplicate/old triggers for this handler, then bind one edit
+  // trigger to THIS destination spreadsheet. Reading the external Entries
+  // spreadsheet requires an installable trigger and authorization.
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
     if (trigger.getHandlerFunction() === 'handlePPMPFormEdit') {
       ScriptApp.deleteTrigger(trigger);
@@ -98,7 +114,22 @@ function setupPPMPAutofillTriggerOnly() {
     .onEdit()
     .create();
 
-  ss.toast('PPMP autofill edit trigger installed. Select a description in column A from row 15 onward to test.', 'PPMP Form', 8);
+  const installed = ScriptApp.getProjectTriggers().some(function(trigger) {
+    return trigger.getHandlerFunction() === 'handlePPMPFormEdit' &&
+      trigger.getEventType() === ScriptApp.EventType.ON_EDIT;
+  });
+
+  if (!installed) {
+    throw new Error(
+      'Google Apps Script did not confirm the edit trigger. Run this command again and approve the requested permissions.'
+    );
+  }
+
+  ss.toast(
+    'Automatic PPMP autofill is enabled for this spreadsheet. Choose a General Description in PPMP Form, column A, row 15 or later.',
+    'PPMP Form',
+    10
+  );
 }
 
 /**
