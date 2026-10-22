@@ -1649,12 +1649,20 @@ function handlePPMPFormEdit(e) {
     return;
   }
 
-  // Process edits that intersect the General Description column A.
-  // This supports A1 as requested as well as the PPMP line-item rows.
-  // The processor only writes fields when the cell value matches Entries.
-  if (editedRange.getColumn() > 1 || editedRange.getLastColumn() < 1) {
+  // Process edits that intersect a field that affects autofill or calculations:
+  // A = General Description, D = Quantity, L = Unit Cost.
+  // A edits populate B/C/E/L and calculate M; D/L edits recalculate M.
+  // Do not return early for D/L, otherwise Estimated Budget never updates
+  // when the user changes quantity or unit cost.
+  const editFirstColumn = editedRange.getColumn();
+  const editLastColumn = editedRange.getLastColumn();
+  const affectsDescription = editFirstColumn <= 1 && editLastColumn >= 1;
+  const affectsQuantity = editFirstColumn <= 4 && editLastColumn >= 4;
+  const affectsUnitCost = editFirstColumn <= 12 && editLastColumn >= 12;
+
+  if (!affectsDescription && !affectsQuantity && !affectsUnitCost) {
     console.log(
-      'PPMP AUTOFILL STOP: Edit does not intersect General Description column A.'
+      'PPMP AUTOFILL STOP: Edit does not intersect General Description (A), Quantity (D), or Unit Cost (L).'
     );
     return;
   }
