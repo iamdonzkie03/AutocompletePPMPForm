@@ -96,41 +96,52 @@ function setupPPMPAutofillTriggerOnly() {
     );
   }
 
-  // Remove older edit handlers as well as duplicates so only one
-  // destination-sheet edit trigger processes each selection.
-  const legacyHandlers = [
-    'handlePPMPFormEdit',
-    'autoSuggestEntriesOnEdit',
-    'handleEntrySelection'
-  ];
+  // Install exactly one edit trigger for THIS destination spreadsheet.
+  // Previous versions only removed a short list of handler names, which could
+  // leave an old/duplicate edit trigger behind after handler names changed.
+  const destinationId = ss.getId();
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
-    if (legacyHandlers.indexOf(trigger.getHandlerFunction()) !== -1 &&
-        trigger.getEventType() === ScriptApp.EventType.ON_EDIT) {
+    if (
+      trigger.getEventType() === ScriptApp.EventType.ON_EDIT &&
+      trigger.getTriggerSource() === ScriptApp.TriggerSource.SPREADSHEETS &&
+      trigger.getTriggerSourceId() === destinationId
+    ) {
       ScriptApp.deleteTrigger(trigger);
     }
   });
 
-  // This installable trigger is essential: autofill reads the separate
-  // Entries spreadsheet, which a simple onEdit trigger cannot reliably access.
+  // This must be an installable trigger, not just a simple onEdit(e), because
+  // the handler reads the Entries data from a separate spreadsheet via openById.
   ScriptApp.newTrigger('handlePPMPFormEdit')
     .forSpreadsheet(ss)
     .onEdit()
     .create();
 
-  const installed = ScriptApp.getProjectTriggers().some(function(trigger) {
+  const matchingTriggers = ScriptApp.getProjectTriggers().filter(function(trigger) {
     return trigger.getHandlerFunction() === 'handlePPMPFormEdit' &&
       trigger.getEventType() === ScriptApp.EventType.ON_EDIT &&
-      trigger.getTriggerSourceId() === ss.getId();
+      trigger.getTriggerSource() === ScriptApp.TriggerSource.SPREADSHEETS &&
+      trigger.getTriggerSourceId() === destinationId;
   });
 
-  if (!installed) {
+  if (matchingTriggers.length !== 1) {
     throw new Error(
-      'Google Apps Script did not confirm the edit trigger. Run this command again and approve the requested permissions.'
+      'Expected exactly one automatic PPMP edit trigger for destination spreadsheet ' +
+      destinationId + ', but found ' + matchingTriggers.length +
+      '. Run setup again and approve the requested permissions.'
     );
   }
 
+  console.log('PPMP AUTOFILL TRIGGER READY: ' + JSON.stringify({
+    spreadsheetId: destinationId,
+    spreadsheetName: ss.getName(),
+    sheetName: targetSheet.getName(),
+    handler: 'handlePPMPFormEdit',
+    triggerCount: matchingTriggers.length
+  }));
+
   ss.toast(
-    'Automatic PPMP autofill is enabled. Choose a General Description in PPMP Form column A; Quantity in D and Unit Cost in L recalculate Estimated Budget in M.',
+    'Automatic PPMP autofill is enabled for this spreadsheet. Select a General Description in column A; Quantity in D and Unit Cost in L recalculate Estimated Budget in M.',
     'PPMP Form',
     10
   );
