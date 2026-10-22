@@ -997,34 +997,54 @@ function findSourceHeaders_(values) {
 function findMatchingEntryRecord_(selectedValue, lookup) {
   const selected = normalizeValue_(selectedValue);
   if (!selected) return null;
+
+  // Exact lookup is fastest; normalizeValue_ also handles case/spacing.
   if (lookup[selected]) return lookup[selected];
 
   const keys = Object.keys(lookup);
   const exactMatches = [];
-  const nameMatches = [];
   const prefixMatches = [];
+  const nameMatches = [];
 
   keys.forEach(function(key) {
     const record = lookup[key];
     const name = normalizeValue_(record.description);
     const specs = normalizeValue_(record.specifications);
-    const full = normalizeValue_(record.specifications
+    const fullComma = normalizeValue_(record.specifications
       ? record.description + ', ' + record.specifications
       : record.description);
+    const fullSpace = normalizeValue_(record.specifications
+      ? record.description + ' ' + record.specifications
+      : record.description);
 
-    if (selected === full || selected === name ||
-        normalizeHeader_(selected) === normalizeHeader_(full) ||
-        normalizeHeader_(selected) === normalizeHeader_(name)) {
+    if (
+      selected === fullComma ||
+      selected === fullSpace ||
+      selected === name ||
+      normalizeHeader_(selected) === normalizeHeader_(fullComma) ||
+      normalizeHeader_(selected) === normalizeHeader_(fullSpace) ||
+      normalizeHeader_(selected) === normalizeHeader_(name)
+    ) {
       exactMatches.push(record);
       return;
     }
 
+    // Dropdown labels may be displayed with different punctuation or
+    // whitespace; accept a name prefix only when it identifies one record.
     if (name && (selected.indexOf(name + ',') === 0 ||
-                 selected.indexOf(name + ' ') === 0)) {
+                 selected.indexOf(name + ' ') === 0 ||
+                 selected.indexOf(name + '-') === 0)) {
       prefixMatches.push(record);
-    } else if (specs && selected === normalizeValue_(record.description + ' ' + record.specifications)) {
+      return;
+    }
+
+    if (specs && selected.indexOf(specs) !== -1 &&
+        selected.indexOf(name) === 0) {
       exactMatches.push(record);
-    } else if (name && (name.indexOf(selected) === 0 || selected.indexOf(name) === 0)) {
+      return;
+    }
+
+    if (name && (name.indexOf(selected) === 0 || selected.indexOf(name) === 0)) {
       nameMatches.push(record);
     }
   });
@@ -1430,38 +1450,33 @@ function handlePPMPFormEdit(e) {
   if (sheet.getName() !== ENTRY_CONFIG.PPMP_FORM_SHEET) return;
 
   const spreadsheet = e.source;
-
-  // ScriptLock works for both container-bound and standalone Apps Script
-  // projects. DocumentLock can be null in a standalone project, which would
-  // stop the edit handler before autofill ever runs.
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
-  try {
-    // Use the template's fixed A:O layout directly. This avoids header
-    // detection being affected by merged/multi-row headings in the PPMP Form.
-    try {
-      processPPMPFormEditDirect_(e, spreadsheet);
-    } catch (autofillError) {
-      console.error('PPMP Form edit processing failed: ' + (autofillError.stack || autofillError.message));
-      spreadsheet.toast(
-        'PPMP Form automation failed: ' + autofillError.message,
-        'PPMP Form',
-        10
-      );
-    }
 
+  try {
+    // Keep the line-item autofill separate from summary refresh so errors
+    // are visible to the user instead of silently leaving every field blank.
+    processPPMPFormEditDirect_(e, spreadsheet);
     SpreadsheetApp.flush();
+
     try {
       updatePPMPSummary_(spreadsheet);
       SpreadsheetApp.flush();
     } catch (summaryError) {
-      console.error('PPMP Summary refresh failed: ' + summaryError.message);
+      console.error('PPMP Summary refresh failed: ' + (summaryError.stack || summaryError.message));
       spreadsheet.toast(
         'PPMP Summary refresh failed: ' + summaryError.message,
         'PPMP Summary',
         10
       );
     }
+  } catch (autofillError) {
+    console.error('PPMP Form autofill failed: ' + (autofillError.stack || autofillError.message));
+    spreadsheet.toast(
+      'Autofill failed: ' + autofillError.message,
+      'PPMP Form',
+      12
+    );
   } finally {
     lock.releaseLock();
   }
