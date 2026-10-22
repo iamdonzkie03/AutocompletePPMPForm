@@ -96,15 +96,22 @@ function setupPPMPAutofillTriggerOnly() {
     );
   }
 
-  // Remove duplicate/old triggers for this handler, then bind one edit
-  // trigger to THIS destination spreadsheet. Reading the external Entries
-  // spreadsheet requires an installable trigger and authorization.
+  // Remove older edit handlers as well as duplicates so only one
+  // destination-sheet edit trigger processes each selection.
+  const legacyHandlers = [
+    'handlePPMPFormEdit',
+    'autoSuggestEntriesOnEdit',
+    'handleEntrySelection'
+  ];
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
-    if (trigger.getHandlerFunction() === 'handlePPMPFormEdit') {
+    if (legacyHandlers.indexOf(trigger.getHandlerFunction()) !== -1 &&
+        trigger.getEventType() === ScriptApp.EventType.ON_EDIT) {
       ScriptApp.deleteTrigger(trigger);
     }
   });
 
+  // This installable trigger is essential: autofill reads the separate
+  // Entries spreadsheet, which a simple onEdit trigger cannot reliably access.
   ScriptApp.newTrigger('handlePPMPFormEdit')
     .forSpreadsheet(ss)
     .onEdit()
@@ -112,7 +119,8 @@ function setupPPMPAutofillTriggerOnly() {
 
   const installed = ScriptApp.getProjectTriggers().some(function(trigger) {
     return trigger.getHandlerFunction() === 'handlePPMPFormEdit' &&
-      trigger.getEventType() === ScriptApp.EventType.ON_EDIT;
+      trigger.getEventType() === ScriptApp.EventType.ON_EDIT &&
+      trigger.getTriggerSourceId() === ss.getId();
   });
 
   if (!installed) {
@@ -1719,9 +1727,18 @@ function processPPMPFormEditDirect_(e, spreadsheet) {
   const lastCol = editedRange.getLastColumn();
   if (lastRow < 1) return;
 
+  // The line-item table starts at row 15. Ignore metadata/header edits.
+  // Keep this guard in the processor as well as the event handler so direct
+  // diagnostic calls cannot accidentally write into the form heading.
+  if (lastRow < 15) return;
+
+  const rowStart = Math.max(15, firstRow);
   const descriptionWasEdited = firstCol <= 1 && lastCol >= 1;
   const quantityWasEdited = firstCol <= 4 && lastCol >= 4;
   const costWasEdited = firstCol <= 12 && lastCol >= 12;
+
+  // Ignore edits unrelated to General Description, Quantity, or Unit Cost.
+  if (!descriptionWasEdited && !quantityWasEdited && !costWasEdited) return;
 
   const sourceSpreadsheet = SpreadsheetApp.openById(
     ENTRY_CONFIG.SOURCE_SPREADSHEET_ID
@@ -1734,7 +1751,7 @@ function processPPMPFormEditDirect_(e, spreadsheet) {
   const sourceData = loadSourceLookup_(sourceSheet);
   const lookup = sourceData.lookup;
 
-  for (let row = firstRow; row <= lastRow; row++) {
+  for (let row = rowStart; row <= lastRow; row++) {
     const descriptionCell = sheet.getRange(row, 1);
     const selectedDescription = String(
       descriptionCell.getDisplayValue() || ''
